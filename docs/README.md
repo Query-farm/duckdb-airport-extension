@@ -165,7 +165,19 @@ This extension applied a change to the C interface of Apache Arrow that enforces
 If other extensions use Apache Arrow please ensure that the patch `align-record-batch.patch` is applied from `vcpkg-overlay/arrow`.
 
 ## Building the extension
+### Install Apache Arrow
+```sh
+# Mac OS X Homebrew (Recommended)
+brew install apache-arrow
 
+# Windows (via vcpkg)
+vcpkg install arrow
+
+# Liunx
+sudo apt install -y libarrow-dev
+```
+
+### DuckDB Airport Extension
 ```sh
 # Clone this repo with submodules.
 # duckdb and extension-ci-tools are submodules.
