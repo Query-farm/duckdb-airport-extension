@@ -47,6 +47,29 @@ namespace duckdb
     handle->Close();
   }
 
+  static string decompressZStandard(const string &source, const int decompressed_size, const string &location)
+  {
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+        auto codec,
+        arrow::util::Codec::Create(arrow::Compression::ZSTD),
+        location, "");
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto decompressed_data,
+                                            ::arrow::AllocateBuffer(decompressed_size),
+                                            location,
+                                            "");
+
+    auto decompress_result = codec->Decompress(
+        source.size(),
+        reinterpret_cast<const uint8_t *>(source.data()),
+        decompressed_size,
+        decompressed_data->mutable_data());
+
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(decompress_result, location, "Failed to decompress the schema data");
+
+    return string(reinterpret_cast<const char *>(decompressed_data->data()), decompressed_size);
+  }
+
   static string generateTempFilename(FileSystem &fs, const string &dir)
   {
     static std::random_device rd;
@@ -599,19 +622,10 @@ namespace duckdb
                                      "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
       }
 
-      auto codec = arrow::util::Codec::Create(arrow::Compression::ZSTD).ValueOrDie();
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto decompressed_url_contents, ::arrow::AllocateBuffer(compressed_content.length), credentials.location, "");
-
-      auto decompress_result = codec->Decompress(
-          compressed_content.data.size(),
-          reinterpret_cast<const uint8_t *>(compressed_content.data.data()),
-          compressed_content.length,
-          decompressed_url_contents->mutable_data());
-
-      AIRPORT_ARROW_ASSERT_OK_LOCATION(decompress_result, credentials.location, "");
+      auto decompressed_url_contents = decompressZStandard(compressed_content.data, compressed_content.length, credentials.location);
 
       msgpack::object_handle oh = msgpack::unpack(
-          (const char *)decompressed_url_contents->data(),
+          (const char *)decompressed_url_contents.data(),
           compressed_content.length,
           0);
       std::vector<std::string> unpacked_data = oh.get().as<std::vector<std::string>>();
@@ -708,28 +722,12 @@ namespace duckdb
       throw AirportFlightException(credentials.location, "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
     }
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
-        auto codec,
-        arrow::util::Codec::Create(arrow::Compression::ZSTD),
-        credentials.location, "");
-
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto decompressed_schema_data,
-                                            ::arrow::AllocateBuffer(compressed_content.length),
-                                            credentials.location,
-                                            "");
-
-    auto decompress_result = codec->Decompress(
-        compressed_content.data.size(),
-        reinterpret_cast<const uint8_t *>(compressed_content.data.data()),
-        compressed_content.length,
-        decompressed_schema_data->mutable_data());
-
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(decompress_result, credentials.location, "Failed to decompress the schema data");
+    auto decompressed_schema_data = decompressZStandard(compressed_content.data, compressed_content.length, credentials.location);
 
     AirportSerializedCatalogRoot catalog_root;
     try
     {
-      msgpack::object_handle oh = msgpack::unpack((const char *)decompressed_schema_data->data(), compressed_content.length, 0);
+      msgpack::object_handle oh = msgpack::unpack((const char *)decompressed_schema_data.data(), decompressed_schema_data.size(), 0);
       msgpack::object obj = oh.get();
       obj.convert(catalog_root);
     }
