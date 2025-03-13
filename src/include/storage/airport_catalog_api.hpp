@@ -39,7 +39,6 @@ namespace duckdb
     // The inline serialized contents.
     std::optional<std::string> serialized;
 
-    // FIX the python side for this.
     MSGPACK_DEFINE_MAP(sha256, url, serialized)
   };
 
