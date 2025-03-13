@@ -27,16 +27,6 @@ namespace duckdb
     MSGPACK_DEFINE(length, data)
   };
 
-  struct AirportSerializedURLAndSHA256Hash
-  {
-    // The URL where the serialized contents of the schema or catalog can be retrieved.
-    std::string url;
-    // The SHA256 of the serialized contents.
-    std::string sha256;
-
-    MSGPACK_DEFINE_MAP(url, sha256)
-  };
-
   struct AirportSerializedContentsWithSHA256Hash
   {
     // The SHA256 of the serialized contents.
