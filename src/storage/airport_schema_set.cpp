@@ -11,6 +11,7 @@
 #include "airport_request_headers.hpp"
 #include "airport_macros.hpp"
 #include <arrow/buffer.h>
+#include "msgpack.hpp"
 
 namespace duckdb
 {
@@ -126,7 +127,19 @@ namespace duckdb
     called_load_entries = true;
   }
 
-  optional_ptr<CatalogEntry> AirportSchemaSet::CreateSchema(ClientContext &context, CreateSchemaInfo &info)
+  struct AirportCreateSchemaParameters
+  {
+    string catalog_name;
+    string schema;
+
+    std::optional<string> comment;
+    unordered_map<string, string> tags;
+
+    MSGPACK_DEFINE_MAP(catalog_name, schema, comment, tags)
+  };
+
+  optional_ptr<CatalogEntry>
+  AirportSchemaSet::CreateSchema(ClientContext &context, CreateSchemaInfo &info)
   {
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
 
@@ -139,8 +152,20 @@ namespace duckdb
 
     std::unique_ptr<arrow::flight::FlightClient> &flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials.location);
 
+    AirportCreateSchemaParameters params;
+    params.catalog_name = info.catalog;
+    params.schema = info.schema;
+    if (!info.comment.IsNull())
+    {
+      params.comment = info.comment.ToString();
+    }
+    params.tags = info.tags;
+
+    std::stringstream packed_buffer;
+    msgpack::pack(packed_buffer, params);
+
     arrow::flight::Action action{"create_schema",
-                                 arrow::Buffer::FromString(info.schema)};
+                                 arrow::Buffer::FromString(packed_buffer.str())};
     std::unique_ptr<arrow::flight::ResultStream> action_results;
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), airport_catalog.credentials.location, "airport_create_schema");
 
