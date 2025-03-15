@@ -291,18 +291,18 @@ namespace duckdb
       }
       auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
 
-      // Determine if the column is the row_id column by looking at the metadata
+      // Determine if the column is the rowid column by looking at the metadata
       // on the column.
-      bool is_row_id_column = false;
+      bool is_rowid_column = false;
       if (schema.metadata != nullptr)
       {
         auto column_metadata = ArrowSchemaMetadata(schema.metadata);
 
-        auto comment = column_metadata.GetOption("is_row_id");
+        auto comment = column_metadata.GetOption("is_rowid");
         if (!comment.empty())
         {
-          is_row_id_column = true;
-          ret->row_id_column_index = col_idx;
+          is_rowid_column = true;
+          ret->rowid_column_index = col_idx;
         }
       }
 
@@ -312,12 +312,12 @@ namespace duckdb
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 
-      if (!is_row_id_column)
+      if (!is_rowid_column)
       {
         return_types.emplace_back(arrow_type->GetDuckType());
       }
 
-      ret->arrow_table.AddColumn(is_row_id_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
+      ret->arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
 
       auto format = string(schema.format);
       auto name = string(schema.name);
@@ -325,11 +325,11 @@ namespace duckdb
       {
         name = string("v") + to_string(col_idx);
       }
-      if (!is_row_id_column)
+      if (!is_rowid_column)
       {
         names.push_back(name);
       }
-      // printf("Added column with id %lld %s\n", is_row_id_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, name.c_str());
+      // printf("Added column with id %lld %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, name.c_str());
     }
     QueryResult::DeduplicateColumns(names);
     return std::move(ret);
@@ -412,14 +412,14 @@ namespace duckdb
       state.all_columns.Reset();
       state.all_columns.SetCardinality(output_size);
       ArrowTableFunction::ArrowToDuckDB(state, data.arrow_table.GetColumns(), state.all_columns,
-                                        data.lines_read - output_size, false, airport_bind_data.row_id_column_index);
+                                        data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
       output.ReferenceColumns(state.all_columns, global_state.projection_ids);
     }
     else
     {
       output.SetCardinality(output_size);
       ArrowTableFunction::ArrowToDuckDB(state, data.arrow_table.GetColumns(), output,
-                                        data.lines_read - output_size, false, airport_bind_data.row_id_column_index);
+                                        data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
     }
 
     output.Verify();

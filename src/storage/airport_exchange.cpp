@@ -222,7 +222,7 @@ namespace duckdb
         //        found_index);
       }
 
-      // idx_t row_id_col_idx = -1;
+      // idx_t rowid_col_idx = -1;
       for (idx_t col_idx = 0;
            col_idx < (idx_t)data.schema_root.arrow_schema.n_children; col_idx++)
       {
@@ -233,18 +233,18 @@ namespace duckdb
         }
         auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
 
-        // Determine if the column is the row_id column by looking at the metadata
+        // Determine if the column is the rowid column by looking at the metadata
         // on the column.
-        bool is_row_id_column = false;
+        bool is_rowid_column = false;
         if (schema.metadata != nullptr)
         {
           auto column_metadata = ArrowSchemaMetadata(schema.metadata);
 
-          auto comment = column_metadata.GetOption("is_row_id");
+          auto comment = column_metadata.GetOption("is_rowid");
           if (!comment.empty())
           {
-            is_row_id_column = true;
-            scan_bind_data->row_id_column_index = col_idx;
+            is_rowid_column = true;
+            scan_bind_data->rowid_column_index = col_idx;
           }
         }
 
@@ -254,15 +254,15 @@ namespace duckdb
           arrow_type->SetDictionary(std::move(dictionary_type));
         }
 
-        if (!is_row_id_column)
+        if (!is_rowid_column)
         {
           scan_bind_data->return_types.emplace_back(arrow_type->GetDuckType());
         }
 
         auto name = string(schema.name);
 
-        // printf("Setting arrow column index %llu to data %s\n", is_row_id_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, arrow_type->GetDuckType().ToString().c_str());
-        scan_bind_data->arrow_table.AddColumn(is_row_id_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
+        // printf("Setting arrow column index %llu to data %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, arrow_type->GetDuckType().ToString().c_str());
+        scan_bind_data->arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
 
         auto format = string(schema.format);
         if (name.empty())
@@ -270,7 +270,7 @@ namespace duckdb
           name = string("v") + to_string(col_idx);
         }
 
-        if (!is_row_id_column)
+        if (!is_rowid_column)
         {
           scan_bind_data->names.push_back(name);
         }

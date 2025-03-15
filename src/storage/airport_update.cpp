@@ -49,7 +49,7 @@ namespace duckdb
       send_names.push_back(table_columns.GetColumn(column_index).GetName());
     }
     // This is always sent last.
-    send_names.push_back("row_id");
+    send_names.push_back("rowid");
 
     for (auto &expr : this->expressions)
     {
@@ -148,13 +148,13 @@ namespace duckdb
                                   client_properties);
 
     // Get the names of the columns that exist on the table with the addition of
-    // row_id which will always be the last column.
+    // rowid which will always be the last column.
     vector<string> table_column_names;
     for (auto &cd : this->table.GetColumns().Physical())
     {
       table_column_names.push_back(cd.GetName());
     }
-    table_column_names.push_back("row_id");
+    table_column_names.push_back("rowid");
 
     AirportExchangeGetGlobalSinkState(context,
                                       table,
@@ -285,7 +285,7 @@ namespace duckdb
 
         // printf("Read chunk to return:%s\n", mock_chunk.ToString().c_str());
 
-        // Now the problem is the row_id column is being returned from the remote server
+        // Now the problem is the rowid column is being returned from the remote server
 
         gstate.return_collection.Append(mock_chunk);
       }

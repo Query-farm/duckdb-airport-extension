@@ -135,7 +135,7 @@ namespace duckdb
       vector<duckdb::LogicalType> return_types;
       vector<string> not_null_columns;
 
-      LogicalType row_id_type = LogicalType(LogicalType::ROW_TYPE);
+      LogicalType rowid_type = LogicalType(LogicalType::ROW_TYPE);
 
       if (arrow_schema.metadata != nullptr)
       {
@@ -204,10 +204,10 @@ namespace duckdb
         {
           auto column_metadata = ArrowSchemaMetadata(column.metadata);
 
-          auto is_row_id = column_metadata.GetOption("is_row_id");
-          if (!is_row_id.empty())
+          auto is_rowid = column_metadata.GetOption("is_rowid");
+          if (!is_rowid.empty())
           {
-            row_id_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), column)->GetDuckType();
+            rowid_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), column)->GetDuckType();
 
             // So the skipping here is a problem, since its assumed
             // that the return_type and column_names can be easily indexed.
@@ -241,7 +241,7 @@ namespace duckdb
       }
 
       QueryResult::DeduplicateColumns(column_names);
-      idx_t row_id_adjust = 0;
+      idx_t rowid_adjust = 0;
       for (idx_t col_idx = 0;
            col_idx < (idx_t)arrow_schema.n_children; col_idx++)
       {
@@ -250,15 +250,15 @@ namespace duckdb
         {
           auto column_metadata = ArrowSchemaMetadata(column.metadata);
 
-          auto is_row_id = column_metadata.GetOption("is_row_id");
-          if (!is_row_id.empty())
+          auto is_rowid = column_metadata.GetOption("is_rowid");
+          if (!is_rowid.empty())
           {
-            row_id_adjust = 1;
+            rowid_adjust = 1;
             continue;
           }
         }
 
-        auto column_def = ColumnDefinition(column_names[col_idx - row_id_adjust], return_types[col_idx - row_id_adjust]);
+        auto column_def = ColumnDefinition(column_names[col_idx - rowid_adjust], return_types[col_idx - rowid_adjust]);
         if (column.metadata != nullptr)
         {
           auto column_metadata = ArrowSchemaMetadata(column.metadata);
@@ -294,7 +294,7 @@ namespace duckdb
 
       // printf("Creating a table in catalog %s, schema %s, name %s\n", catalog.GetName().c_str(), schema.name.c_str(), info.table.c_str());
 
-      auto table_entry = make_uniq<AirportTableEntry>(catalog, schema, info, row_id_type);
+      auto table_entry = make_uniq<AirportTableEntry>(catalog, schema, info, rowid_type);
       table_entry->table_data = make_uniq<AirportAPITable>(table);
       CreateEntry(std::move(table_entry));
     }
@@ -1016,18 +1016,18 @@ namespace duckdb
       auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
       arrow_types.push_back(arrow_type->GetDuckType().ToString());
 
-      // Determine if the column is the row_id column by looking at the metadata
+      // Determine if the column is the rowid column by looking at the metadata
       // on the column.
-      bool is_row_id_column = false;
+      bool is_rowid_column = false;
       if (schema.metadata != nullptr)
       {
         auto column_metadata = ArrowSchemaMetadata(schema.metadata);
 
-        auto comment = column_metadata.GetOption("is_row_id");
+        auto comment = column_metadata.GetOption("is_rowid");
         if (!comment.empty())
         {
-          is_row_id_column = true;
-          scan_bind_data->row_id_column_index = col_idx;
+          is_rowid_column = true;
+          scan_bind_data->rowid_column_index = col_idx;
         }
       }
 
@@ -1037,15 +1037,15 @@ namespace duckdb
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 
-      if (!is_row_id_column)
+      if (!is_rowid_column)
       {
         scan_bind_data->return_types.emplace_back(arrow_type->GetDuckType());
       }
 
       auto name = string(schema.name);
 
-      // printf("Setting arrow column index %llu to data %s\n", is_row_id_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, arrow_type->GetDuckType().ToString().c_str());
-      scan_bind_data->arrow_table.AddColumn(is_row_id_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
+      // printf("Setting arrow column index %llu to data %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, arrow_type->GetDuckType().ToString().c_str());
+      scan_bind_data->arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
 
       auto format = string(schema.format);
       if (name.empty())
@@ -1053,7 +1053,7 @@ namespace duckdb
         name = string("v") + to_string(col_idx);
       }
 
-      if (!is_row_id_column)
+      if (!is_rowid_column)
       {
         scan_bind_data->names.push_back(name);
       }

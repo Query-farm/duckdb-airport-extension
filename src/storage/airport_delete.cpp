@@ -61,8 +61,8 @@ using namespace duckdb_yyjson; // NOLINT
 namespace duckdb
 {
 
-  AirportDelete::AirportDelete(LogicalOperator &op, TableCatalogEntry &table, idx_t row_id_index, bool return_chunk)
-      : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), table(table), row_id_index(row_id_index), return_chunk(return_chunk)
+  AirportDelete::AirportDelete(LogicalOperator &op, TableCatalogEntry &table, idx_t rowid_index, bool return_chunk)
+      : PhysicalOperator(PhysicalOperatorType::EXTENSION, op.types, 1), table(table), rowid_index(rowid_index), return_chunk(return_chunk)
   {
   }
 
@@ -110,7 +110,7 @@ namespace duckdb
     auto delete_global_state = make_uniq<AirportDeleteGlobalState>(context, airport_table, GetTypes(), return_chunk);
 
     delete_global_state->send_types = {airport_table.GetRowIdType()};
-    vector<string> send_names = {"row_id"};
+    vector<string> send_names = {"rowid"};
     ArrowSchema send_schema;
     auto client_properties = context.GetClientProperties();
     ArrowConverter::ToArrowSchema(&send_schema, delete_global_state->send_types, send_names,
@@ -153,7 +153,7 @@ namespace duckdb
     // especially if filtering is being applied, but we need to only send the row id column.
     auto small_chunk = DataChunk();
     small_chunk.Initialize(context.client, gstate.send_types, chunk.size());
-    small_chunk.data[0].Reference(chunk.data[row_id_index]);
+    small_chunk.data[0].Reference(chunk.data[rowid_index]);
     small_chunk.SetCardinality(chunk.size());
 
     auto appender = make_uniq<ArrowAppender>(gstate.send_types, small_chunk.size(), context.client.GetClientProperties(),

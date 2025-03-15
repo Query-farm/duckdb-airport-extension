@@ -48,7 +48,7 @@ namespace duckdb
 
     auto &update = op->Cast<LogicalUpdate>();
 
-    // If the table produced row_ids we cannot optimize it.
+    // If the table produced rowids we cannot optimize it.
     if (update.table.GetRowIdType() != LogicalType::SQLNULL)
       return;
 
@@ -62,7 +62,7 @@ namespace duckdb
 
     auto &del = op->Cast<LogicalDelete>();
 
-    // If the table produced row_ids we cannot optimize it.
+    // If the table produced rowids we cannot optimize it.
     if (del.table.GetRowIdType() != LogicalType::SQLNULL)
       return;
 

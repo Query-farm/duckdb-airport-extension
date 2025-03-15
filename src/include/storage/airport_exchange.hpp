@@ -22,7 +22,7 @@ namespace duckdb
     // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
     string trace_id;
 
-    idx_t row_id_column_index = COLUMN_IDENTIFIER_ROW_ID;
+    idx_t rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
 
     // This is the auth token.
     string auth_token;
