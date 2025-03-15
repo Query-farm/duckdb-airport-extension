@@ -438,25 +438,39 @@ namespace duckdb
 
   struct SerializedFlightAppMetadata
   {
-    // This will either be a "table" or "function"
-    //
-    // table is a sql table
-    // function is a scalar function.
+    // This is the type of item to populate in DuckDB's catalog
+    // it can be "table", "scalar_function", "table_function"
     string type;
+
+    // The name of the schema where this item exists.
     string schema;
+
+    // The name of the catalog or database where this item exists.
     string catalog;
+
+    // The name of this item.
     string name;
+
+    // A custom comment for this item.
     string comment;
 
-    // This is the Arrow serialized schema for the input to the function, its not set
-    // on tables.
+    // This is the Arrow serialized schema for the input
+    // to the function, its not set on tables.
+
+    // In the case of scalar function this is the input schema
     std::optional<string> input_schema;
+
+    // The name of the action passed to the Arrow Flight server
     std::optional<string> action_name;
 
     // This is the function description for table or scalar functions.
     std::optional<string> description;
 
-    MSGPACK_DEFINE_MAP(type, schema, catalog, name, comment, input_schema, action_name, description)
+    MSGPACK_DEFINE_MAP(
+        type, schema,
+        catalog, name,
+        comment, input_schema,
+        action_name, description)
   };
 
   static std::unique_ptr<SerializedFlightAppMetadata> ParseFlightAppMetadata(const string &app_metadata)

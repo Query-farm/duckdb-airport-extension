@@ -391,9 +391,7 @@ namespace duckdb
     // We aren't interested in anything after the first result.
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), airport_catalog.credentials.location, "");
 
-    // The result is a catalog entry, so we're going to need to create that if the
-    // action succeeded.
-
+    // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, LogicalType(LogicalTypeId::BIGINT));
     AirportAPITable new_table(
         airport_catalog.credentials.location,
@@ -403,7 +401,6 @@ namespace duckdb
         base.table,
         string(""));
 
-    // Now how are we going to get the flight info, it could just be serialized as part of the action result.
     new_table.flight_info = std::move(flight_info);
     table_entry->table_data = make_uniq<AirportAPITable>(new_table);
 

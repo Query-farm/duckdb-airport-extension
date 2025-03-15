@@ -593,7 +593,7 @@ namespace duckdb
         params.flight_descriptor,
         data.scan_data->flight_info_->descriptor().SerializeToString(),
         data.server_location,
-        "take_flight_statitics");
+        "take_flight_statistics");
     params.column_name = schema->name;
     params.type = duck_type.ToString();
 

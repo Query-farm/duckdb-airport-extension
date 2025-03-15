@@ -9,6 +9,12 @@
 #include "storage/airport_delete.hpp"
 #include "storage/airport_insert.hpp"
 #include "duckdb/planner/operator/logical_create_table.hpp"
+#include <arrow/flight/client.h>
+#include <arrow/flight/types.h>
+#include <arrow/buffer.h>
+#include "airport_macros.hpp"
+
+#include "airport_request_headers.hpp"
 
 namespace duckdb
 {
@@ -18,6 +24,15 @@ namespace duckdb
       : Catalog(db_p), internal_name(internal_name), access_mode(access_mode), credentials(std::move(credentials)),
         schemas(*this)
   {
+    // Persist a flight client for calls to get_catalog_version
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto parsed_location, flight::Location::Parse(this->credentials.location),
+                                            credentials.location,
+                                            "");
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_client,
+                                            flight::FlightClient::Connect(parsed_location),
+                                            credentials.location,
+                                            "");
   }
 
   AirportCatalog::~AirportCatalog() = default;
@@ -26,14 +41,61 @@ namespace duckdb
   {
   }
 
+  struct GetCatalogVersionResult
+  {
+    uint64_t catalog_version;
+    bool is_fixed;
+    MSGPACK_DEFINE(catalog_version, is_fixed)
+  };
+
   optional_idx AirportCatalog::GetCatalogVersion(ClientContext &context)
   {
-    // FIXME: may want to change this.
-    // These catalogs generally don't change so just return 1 for now, if we were
-    // creating dynamic tables or other changes this will have to change.
-    //
-    // If we don't do this all statements get rebound twice.
-    return 1;
+    if (catalog_version_fixed)
+    {
+      return catalog_version_fixed.value();
+    }
+
+    arrow::flight::FlightCallOptions call_options;
+    airport_add_standard_headers(call_options, credentials.location);
+    airport_add_authorization_header(call_options, credentials.auth_token);
+
+    // Might want to cache this though if a server declares the server catalog will not change.
+    arrow::flight::Action action{"get_catalog_version", arrow::Buffer::FromString(internal_name)};
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
+                                            flight_client->DoAction(call_options, action),
+                                            credentials.location,
+                                            "calling get_catalog_version action");
+
+    // The only item returned is a serialized flight info.
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_catalog_version_buffer,
+                                            action_results->Next(),
+                                            credentials.location,
+                                            "reading get_catalog_version action result");
+
+    // Read it using msgpack.
+    GetCatalogVersionResult result;
+    try
+    {
+      msgpack::object_handle oh = msgpack::unpack(
+          (const char *)serialized_catalog_version_buffer->body->data(),
+          serialized_catalog_version_buffer->body->size(),
+          0);
+      msgpack::object obj = oh.get();
+      obj.convert(result);
+    }
+    catch (const std::exception &e)
+    {
+      throw AirportFlightException(credentials.location,
+                                   "File to parse msgpack encoded get_catalog_version response: " + string(e.what()));
+    }
+
+    if (result.is_fixed)
+    {
+      catalog_version_fixed = result.catalog_version;
+    }
+
+    return result.catalog_version;
   }
 
   optional_ptr<CatalogEntry> AirportCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info)

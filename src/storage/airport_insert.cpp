@@ -18,7 +18,6 @@
 
 #include "airport_flight_stream.hpp"
 #include "airport_take_flight.hpp"
-#include "yyjson.hpp"
 #include "storage/airport_exchange.hpp"
 #include "airport_macros.hpp"
 #include "airport_request_headers.hpp"
@@ -26,8 +25,7 @@
 #include "airport_secrets.hpp"
 #include "airport_constraints.hpp"
 #include "duckdb/storage/table/append_state.hpp"
-
-using namespace duckdb_yyjson; // NOLINT
+#include "msgpack.hpp"
 
 namespace duckdb
 {
@@ -333,6 +331,12 @@ namespace duckdb
     return SinkResultType::NEED_MORE_INPUT;
   }
 
+  struct AirportInsertFinalMetadata
+  {
+    uint64_t total_inserted;
+    MSGPACK_DEFINE_MAP(total_inserted)
+  };
+
   //===--------------------------------------------------------------------===//
   // Finalize
   //===--------------------------------------------------------------------===//
@@ -363,26 +367,24 @@ namespace duckdb
       {
         auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
 
-        // Try to parse the metadata
-        // Try to parse out a JSON document that contains a progress indicator
-        // that will update the scan data.
-
-        yyjson_doc *doc = yyjson_read((const char *)metadata.data(), metadata.size(), 0);
-        if (doc)
+        AirportInsertFinalMetadata final_metadata;
+        try
         {
-          // Get the root object
-          yyjson_val *root = yyjson_doc_get_root(doc);
-          if (root && yyjson_is_obj(root))
-          {
-            yyjson_val *total_val = yyjson_obj_get(root, "total_inserted");
-            if (total_val && yyjson_is_int(total_val))
-            {
-              gstate.insert_count = yyjson_get_int(total_val);
-            }
-          }
+          msgpack::object_handle oh = msgpack::unpack(
+              (const char *)metadata.data(),
+              metadata.size(),
+              0);
+          msgpack::object obj = oh.get();
+          obj.convert(final_metadata);
+          gstate.insert_count = final_metadata.total_inserted;
         }
-        // Free the JSON document
-        yyjson_doc_free(doc);
+        catch (const std::exception &e)
+        {
+          throw AirportFlightException(gstate.table->table_data->location,
+                                       gstate.flight_descriptor,
+                                       "Failed to parse msgpack encoded object for final insert metadata.",
+                                       string(e.what()));
+        }
       }
     }
 

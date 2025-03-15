@@ -82,6 +82,7 @@ namespace duckdb
   private:
     AirportSchemaSet schemas;
     string default_schema;
+    std::optional<uint64_t> catalog_version_fixed;
+    std::unique_ptr<arrow::flight::FlightClient> flight_client;
   };
-
 }

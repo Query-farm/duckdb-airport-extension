@@ -11,7 +11,6 @@
 
 #include "airport_flight_stream.hpp"
 #include "airport_take_flight.hpp"
-#include "yyjson.hpp"
 #include "storage/airport_exchange.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -22,8 +21,6 @@
 #include "airport_flight_exception.hpp"
 #include "airport_secrets.hpp"
 #include "duckdb/execution/expression_executor.hpp"
-
-using namespace duckdb_yyjson; // NOLINT
 
 namespace duckdb
 {
@@ -297,6 +294,12 @@ namespace duckdb
     return SinkResultType::NEED_MORE_INPUT;
   }
 
+  struct AirportUpdateFinalMetadata
+  {
+    uint64_t total_updated;
+    MSGPACK_DEFINE_MAP(total_updated)
+  };
+
   //===--------------------------------------------------------------------===//
   // Finalize
   //===--------------------------------------------------------------------===//
@@ -326,27 +329,24 @@ namespace duckdb
       if (!gstate.scan_bind_data->scan_data->last_app_metadata_.empty())
       {
         auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
-
-        // Try to parse the metadata
-        // Try to parse out a JSON document that contains a progress indicator
-        // that will update the scan data.
-
-        yyjson_doc *doc = yyjson_read((const char *)metadata.data(), metadata.size(), 0);
-        if (doc)
+        AirportUpdateFinalMetadata final_metadata;
+        try
         {
-          // Get the root object
-          yyjson_val *root = yyjson_doc_get_root(doc);
-          if (root && yyjson_is_obj(root))
-          {
-            yyjson_val *total_val = yyjson_obj_get(root, "total_updated");
-            if (total_val && yyjson_is_int(total_val))
-            {
-              gstate.update_count = yyjson_get_int(total_val);
-            }
-          }
+          msgpack::object_handle oh = msgpack::unpack(
+              (const char *)metadata.data(),
+              metadata.size(),
+              0);
+          msgpack::object obj = oh.get();
+          obj.convert(final_metadata);
+          gstate.update_count = final_metadata.total_updated;
         }
-        // Free the JSON document
-        yyjson_doc_free(doc);
+        catch (const std::exception &e)
+        {
+          throw AirportFlightException(gstate.table.table_data->location,
+                                       gstate.flight_descriptor,
+                                       "Failed to parse msgpack encoded object for final insert metadata.",
+                                       string(e.what()));
+        }
       }
     }
 

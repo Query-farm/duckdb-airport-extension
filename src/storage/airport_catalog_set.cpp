@@ -36,7 +36,6 @@ namespace duckdb
     std::string schema_name;
     std::string table_name;
 
-    // Define how to serialize/deserialize the structure using MessagePack
     MSGPACK_DEFINE(schema_name, table_name)
   };
 
