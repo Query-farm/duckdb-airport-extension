@@ -62,9 +62,9 @@ namespace duckdb
     auto &flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials.location);
 
     // Common parameters
-    DropItemActionParameters params{
-        .catalog_name = info.catalog,
-        .schema_name = info.schema};
+    DropItemActionParameters params;
+    params.catalog_name = info.catalog;
+    params.schema_name = info.schema;
     params.name = (info.type == CatalogType::TABLE_ENTRY) ? info.name : "";
     params.ignore_not_found = (info.if_not_found == OnEntryNotFound::RETURN_NULL) ? true : false;
 
