@@ -131,12 +131,12 @@ namespace duckdb
 
       std::shared_ptr<arrow::Schema> info_schema;
       arrow::ipc::DictionaryMemo dictionary_memo;
-      string error_location = "(" + airport_catalog.credentials.location + ")";
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema, table.flight_info->GetSchema(&dictionary_memo), airport_catalog.credentials.location, table.flight_info->descriptor(), "");
+      string error_location = "(" + airport_catalog.credentials->location + ")";
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema, table.flight_info->GetSchema(&dictionary_memo), airport_catalog.credentials->location, table.flight_info->descriptor(), "");
 
       ArrowSchema arrow_schema;
 
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials.location, table.flight_info->descriptor(), "ExportSchema");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials->location, table.flight_info->descriptor(), "ExportSchema");
 
       vector<string> column_names;
       vector<duckdb::LogicalType> return_types;
@@ -164,7 +164,7 @@ namespace duckdb
           }
           catch (const std::exception &e)
           {
-            throw AirportFlightException(airport_catalog.credentials.location,
+            throw AirportFlightException(airport_catalog.credentials->location,
                                          table.flight_info->descriptor(),
                                          "File to parse msgpack encoded table check constraints.",
                                          string(e.what()));
@@ -334,13 +334,13 @@ namespace duckdb
                                   column_names,
                                   client_properties);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), airport_catalog.credentials.location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), airport_catalog.credentials->location, "");
 
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = std::make_shared<arrow::KeyValueMetadata>();
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("table_name", base.table), airport_catalog.credentials.location, "");
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("schema_name", base.schema), airport_catalog.credentials.location, "");
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("catalog_name", base.catalog), airport_catalog.credentials.location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("table_name", base.table), airport_catalog.credentials->location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("schema_name", base.schema), airport_catalog.credentials->location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("catalog_name", base.catalog), airport_catalog.credentials->location, "");
 
     real_schema = real_schema->WithMetadata(schema_metadata);
 
@@ -348,25 +348,25 @@ namespace duckdb
 
     arrow::flight::FlightCallOptions call_options;
 
-    airport_add_standard_headers(call_options, airport_catalog.credentials.location);
-    airport_add_authorization_header(call_options, airport_catalog.credentials.auth_token);
+    airport_add_standard_headers(call_options, airport_catalog.credentials->location);
+    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token);
 
     call_options.headers.emplace_back("airport-action-name", "create_table");
 
-    std::unique_ptr<flight::FlightClient> &flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials.location);
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
         auto serialized_schema,
         arrow::ipc::SerializeSchema(*real_schema, arrow::default_memory_pool()),
-        airport_catalog.credentials.location,
+        airport_catalog.credentials->location,
         "");
 
     arrow::flight::Action action{"create_table",
                                  serialized_schema};
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), airport_catalog.credentials.location, "airport_create_table");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), airport_catalog.credentials->location, "airport_create_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), airport_catalog.credentials.location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), airport_catalog.credentials->location, "");
 
     if (flight_info_buffer == nullptr)
     {
@@ -377,15 +377,15 @@ namespace duckdb
 
     // Now how to we deserialize the flight info from that buffer...
     std::shared_ptr<flight::FlightInfo> flight_info;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), airport_catalog.credentials.location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), airport_catalog.credentials->location, "");
 
     // We aren't interested in anything after the first result.
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), airport_catalog.credentials.location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), airport_catalog.credentials->location, "");
 
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, LogicalType(LogicalTypeId::BIGINT));
     AirportAPITable new_table(
-        airport_catalog.credentials.location,
+        airport_catalog.credentials->location,
         flight_info,
         base.catalog,
         base.schema,

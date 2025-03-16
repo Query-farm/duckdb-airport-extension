@@ -103,9 +103,9 @@ namespace duckdb
     throw NotImplementedException("AirportAPI::GetCatalogs");
   }
 
-  static std::unordered_map<std::string, std::unique_ptr<flight::FlightClient>> airport_flight_clients_by_location;
+  static std::unordered_map<std::string, std::shared_ptr<flight::FlightClient>> airport_flight_clients_by_location;
 
-  std::unique_ptr<flight::FlightClient> &AirportAPI::FlightClientForLocation(const std::string &location)
+  std::shared_ptr<flight::FlightClient> AirportAPI::FlightClientForLocation(const std::string &location)
   {
     auto it = airport_flight_clients_by_location.find(location);
     if (it != airport_flight_clients_by_location.end())
@@ -594,7 +594,7 @@ namespace duckdb
                              const string &schema,
                              const AirportSerializedContentsWithSHA256Hash &source,
                              const string &cache_base_dir,
-                             AirportCredentials credentials)
+                             shared_ptr<AirportCredentials> credentials)
   {
     auto contents = make_uniq<AirportSchemaContents>();
 
@@ -632,11 +632,11 @@ namespace duckdb
       }
       catch (const std::exception &e)
       {
-        throw AirportFlightException(credentials.location,
+        throw AirportFlightException(credentials->location,
                                      "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
       }
 
-      auto decompressed_url_contents = decompressZStandard(compressed_content.data, compressed_content.length, credentials.location);
+      auto decompressed_url_contents = decompressZStandard(compressed_content.data, compressed_content.length, credentials->location);
 
       msgpack::object_handle oh = msgpack::unpack(
           (const char *)decompressed_url_contents.data(),
@@ -646,14 +646,14 @@ namespace duckdb
 
       for (auto item : unpacked_data)
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(item), credentials.location, "");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(item), credentials->location, "");
 
         // Look in api_metadata for each flight and determine if it should be handled
         // if there is no metadata specified on a flight it is ignored.
         auto app_metadata = flight_info->app_metadata();
         if (!app_metadata.empty())
         {
-          handle_flight_app_metadata(app_metadata, catalog, schema, credentials.location, std::move(flight_info), contents);
+          handle_flight_app_metadata(app_metadata, catalog, schema, credentials->location, std::move(flight_info), contents);
         }
       }
 
@@ -663,18 +663,18 @@ namespace duckdb
     {
       // We need to load the contents of the schemas by listing the flights.
       arrow::flight::FlightCallOptions call_options;
-      airport_add_standard_headers(call_options, credentials.location);
+      airport_add_standard_headers(call_options, credentials->location);
       call_options.headers.emplace_back("airport-list-flights-filter-catalog", catalog);
       call_options.headers.emplace_back("airport-list-flights-filter-schema", schema);
 
-      airport_add_authorization_header(call_options, credentials.auth_token);
+      airport_add_authorization_header(call_options, credentials->auth_token);
 
-      std::unique_ptr<flight::FlightClient> &flight_client = FlightClientForLocation(credentials.location);
+      auto flight_client = FlightClientForLocation(credentials->location);
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto listing, flight_client->ListFlights(call_options, {credentials.criteria}), credentials.location, "");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto listing, flight_client->ListFlights(call_options, {credentials->criteria}), credentials->location, "");
 
       std::shared_ptr<flight::FlightInfo> flight_info;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), credentials.location, "");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), credentials->location, "");
 
       while (flight_info != nullptr)
       {
@@ -682,9 +682,9 @@ namespace duckdb
         auto app_metadata = flight_info->app_metadata();
         if (!app_metadata.empty())
         {
-          handle_flight_app_metadata(app_metadata, catalog, schema, credentials.location, flight_info, contents);
+          handle_flight_app_metadata(app_metadata, catalog, schema, credentials->location, flight_info, contents);
         }
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), credentials.location, "");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), credentials->location, "");
       }
 
       return contents;
@@ -692,31 +692,34 @@ namespace duckdb
   }
 
   unique_ptr<AirportSchemaCollection>
-  AirportAPI::GetSchemas(const string &catalog, AirportCredentials credentials)
+  AirportAPI::GetSchemas(const string &catalog_name, shared_ptr<AirportCredentials> credentials)
   {
     auto result = make_uniq<AirportSchemaCollection>();
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, credentials.location);
-    airport_add_authorization_header(call_options, credentials.auth_token);
+    airport_add_standard_headers(call_options, credentials->location);
+    airport_add_authorization_header(call_options, credentials->auth_token);
 
     call_options.headers.emplace_back("airport-action-name", "list_schemas");
 
-    std::unique_ptr<flight::FlightClient> &flight_client = FlightClientForLocation(credentials.location);
+    auto flight_client = FlightClientForLocation(credentials->location);
 
-    AirportSerializedCatalogSchemaRequest catalog_request = {catalog};
+    AirportSerializedCatalogSchemaRequest catalog_request = {catalog_name};
     std::stringstream packed_buffer;
     msgpack::pack(packed_buffer, catalog_request);
     arrow::flight::Action action{"list_schemas", arrow::Buffer::FromString(packed_buffer.str())};
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), credentials.location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results,
+                                            flight_client->DoAction(call_options, action),
+                                            credentials->location,
+                                            "");
 
     // There is a single item returned which is the compressed schema data.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto msgpack_serialized_response, action_results->Next(), credentials.location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto msgpack_serialized_response, action_results->Next(), credentials->location, "");
 
     if (msgpack_serialized_response == nullptr)
     {
-      throw AirportFlightException(credentials.location, "Failed to obtain schema data from Arrow Flight server via DoAction()");
+      throw AirportFlightException(credentials->location, "Failed to obtain schema data from Arrow Flight server via DoAction()");
     }
 
     AirportSerializedCompressedContent compressed_content;
@@ -733,10 +736,10 @@ namespace duckdb
     }
     catch (const std::exception &e)
     {
-      throw AirportFlightException(credentials.location, "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
+      throw AirportFlightException(credentials->location, "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
     }
 
-    auto decompressed_schema_data = decompressZStandard(compressed_content.data, compressed_content.length, credentials.location);
+    auto decompressed_schema_data = decompressZStandard(compressed_content.data, compressed_content.length, credentials->location);
 
     AirportSerializedCatalogRoot catalog_root;
     try
@@ -756,7 +759,7 @@ namespace duckdb
     {
       AirportAPISchema schema_result;
       schema_result.schema_name = schema.schema;
-      schema_result.catalog_name = catalog;
+      schema_result.catalog_name = catalog_name;
       schema_result.comment = schema.description;
       schema_result.tags = schema.tags;
 
@@ -764,7 +767,7 @@ namespace duckdb
       result->schemas.emplace_back(schema_result);
     }
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), credentials.location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), credentials->location, "");
 
     return result;
   }

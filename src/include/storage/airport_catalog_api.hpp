@@ -165,15 +165,15 @@ namespace duckdb
                                                             const string &schema,
                                                             const AirportSerializedContentsWithSHA256Hash &source,
                                                             const string &cache_base_dir,
-                                                            AirportCredentials credentials);
-    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, AirportCredentials credentials);
+                                                            shared_ptr<AirportCredentials> credentials);
+    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, shared_ptr<AirportCredentials> credentials);
 
     static void PopulateCatalogSchemaCacheFromURLorContent(CURL *curl,
                                                            const AirportSchemaCollection &collection,
                                                            const string &catalog_name,
                                                            const string &baseDir);
 
-    static std::unique_ptr<arrow::flight::FlightClient> &FlightClientForLocation(const std::string &location);
+    static std::shared_ptr<arrow::flight::FlightClient> FlightClientForLocation(const std::string &location);
   };
 
 } // namespace duckdb

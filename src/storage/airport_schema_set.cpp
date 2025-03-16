@@ -145,12 +145,12 @@ namespace duckdb
 
     arrow::flight::FlightCallOptions call_options;
 
-    airport_add_standard_headers(call_options, airport_catalog.credentials.location);
-    airport_add_authorization_header(call_options, airport_catalog.credentials.auth_token);
+    airport_add_standard_headers(call_options, airport_catalog.credentials->location);
+    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token);
 
     call_options.headers.emplace_back("airport-action-name", "create_schema");
 
-    std::unique_ptr<arrow::flight::FlightClient> &flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials.location);
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location);
 
     AirportCreateSchemaParameters params;
     params.catalog_name = info.catalog;
@@ -167,10 +167,10 @@ namespace duckdb
     arrow::flight::Action action{"create_schema",
                                  arrow::Buffer::FromString(packed_buffer.str())};
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), airport_catalog.credentials.location, "airport_create_schema");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), airport_catalog.credentials->location, "airport_create_schema");
 
     // We aren't interested in anything from this call.
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), airport_catalog.credentials.location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), airport_catalog.credentials->location, "");
 
     auto real_schema = make_uniq<AirportAPISchema>();
     real_schema->catalog_name = catalog.GetName();

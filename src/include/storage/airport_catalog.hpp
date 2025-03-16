@@ -38,7 +38,8 @@ namespace duckdb
 
     string internal_name;
     AccessMode access_mode;
-    AirportCredentials credentials;
+    shared_ptr<AirportCredentials> credentials;
+    std::shared_ptr<arrow::flight::FlightClient> flight_client;
 
   public:
     void Initialize(bool load_builtin) override;
@@ -76,6 +77,8 @@ namespace duckdb
 
     optional_idx GetCatalogVersion(ClientContext &context) override;
 
+    std::optional<string> GetTransactionIdentifier();
+
   private:
     void DropSchema(ClientContext &context, DropInfo &info) override;
 
@@ -83,6 +86,5 @@ namespace duckdb
     AirportSchemaSet schemas;
     string default_schema;
     std::optional<uint64_t> catalog_version_fixed;
-    std::unique_ptr<arrow::flight::FlightClient> flight_client;
   };
 }

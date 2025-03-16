@@ -368,6 +368,16 @@ namespace duckdb
 
     const auto info = reinterpret_cast<std::shared_ptr<flight::FlightInfo> *>(input.inputs[1].GetPointer());
 
+    // The transaction identifier is passed as the 2nd argument.
+    if (!input.inputs[2].IsNull())
+    {
+      auto id = input.inputs[2].ToString();
+      if (!id.empty())
+      {
+        params.user_supplied_headers["airport-transaction-id"] = {id};
+      }
+    }
+
     return AirportTakeFlightBindWithFlightDescriptor(
         params,
         info->get()->descriptor(),
@@ -964,7 +974,7 @@ namespace duckdb
 
     auto take_flight_function_with_pointer = TableFunction(
         "airport_take_flight",
-        {LogicalType::VARCHAR, LogicalType::POINTER},
+        {LogicalType::VARCHAR, LogicalType::POINTER, LogicalType::VARCHAR},
         AirportTakeFlight,
         take_flight_bind_with_pointer,
         AirportArrowScanInitGlobal,
