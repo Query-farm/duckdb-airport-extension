@@ -97,6 +97,13 @@ namespace duckdb
   {
   }
 
+  struct AirportTableCheckConstraints
+  {
+    std::vector<std::string> constraints;
+
+    MSGPACK_DEFINE_MAP(constraints)
+  };
+
   void AirportTableSet::LoadEntries(ClientContext &context)
   {
     // auto &transaction = AirportTransaction::Get(context, catalog);
@@ -144,49 +151,33 @@ namespace duckdb
         auto check_constraints = schema_metadata.GetOption("check_constraints");
         if (!check_constraints.empty())
         {
-          yyjson_doc *doc = yyjson_read(check_constraints.c_str(), check_constraints.size(), 0);
-          if (doc)
+
+          AirportTableCheckConstraints table_constraints;
+          try
           {
-            // Get the root of the JSON document
-            yyjson_val *root = yyjson_doc_get_root(doc);
-
-            // Ensure the root is an object (dictionary)
-            if (root && yyjson_is_arr(root))
-            {
-              size_t idx, max;
-              yyjson_val *val;
-              yyjson_arr_foreach(root, idx, max, val)
-              {
-                if (yyjson_is_str(val))
-                {
-                  string expression = yyjson_get_str(val);
-
-                  auto expression_list = Parser::ParseExpressionList(expression, context.GetParserOptions());
-                  if (expression_list.size() != 1)
-                  {
-                    throw ParserException("Failed to parse CHECK constraint expression: " + expression + " for table " + table.name);
-                  }
-                  info.constraints.emplace_back(make_uniq<CheckConstraint>(std::move(expression_list[0])));
-                }
-                else
-                {
-                  yyjson_doc_free(doc);
-                  throw ParserException("Encountered non string element in CHECK constraints for table  " + table.name);
-                }
-              }
-            }
-            else
-            {
-              // Free the JSON document after parsing
-              yyjson_doc_free(doc);
-              throw ParserException("Failed to parse check constraints JSON for table " + table.name + " is not an array");
-            }
-            // Free the JSON document after parsing
-            yyjson_doc_free(doc);
+            msgpack::object_handle oh = msgpack::unpack(
+                (const char *)check_constraints.c_str(),
+                check_constraints.size(),
+                0);
+            msgpack::object obj = oh.get();
+            obj.convert(table_constraints);
           }
-          else
+          catch (const std::exception &e)
           {
-            throw ParserException("Failed to parse check constraints as JSON for table " + table.name);
+            throw AirportFlightException(airport_catalog.credentials.location,
+                                         table.flight_info->descriptor(),
+                                         "File to parse msgpack encoded table check constraints.",
+                                         string(e.what()));
+          }
+
+          for (auto &expression : table_constraints.constraints)
+          {
+            auto expression_list = Parser::ParseExpressionList(expression, context.GetParserOptions());
+            if (expression_list.size() != 1)
+            {
+              throw ParserException("Failed to parse CHECK constraint expression: " + expression + " for table " + table.name);
+            }
+            info.constraints.push_back(make_uniq<CheckConstraint>(std::move(expression_list[0])));
           }
         }
       }
