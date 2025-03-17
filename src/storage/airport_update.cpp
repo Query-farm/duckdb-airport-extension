@@ -347,7 +347,7 @@ namespace duckdb
         {
           throw AirportFlightException(gstate.table.table_data->location,
                                        gstate.flight_descriptor,
-                                       "Failed to parse msgpack encoded object for final insert metadata.",
+                                       "Failed to parse msgpack encoded object for final update metadata.",
                                        string(e.what()));
         }
       }

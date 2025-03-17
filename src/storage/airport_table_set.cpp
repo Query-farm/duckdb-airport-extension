@@ -20,7 +20,6 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
-#include "yyjson.hpp"
 #include <arrow/buffer.h>
 #include <arrow/c/bridge.h>
 #include <arrow/io/memory.h>
@@ -40,8 +39,6 @@
 #include "storage/airport_schema_entry.hpp"
 #include "storage/airport_table_set.hpp"
 #include "storage/airport_transaction.hpp"
-
-using namespace duckdb_yyjson; // NOLINT
 
 struct FunctionCatalogSchemaName
 {

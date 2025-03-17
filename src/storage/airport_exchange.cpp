@@ -34,10 +34,7 @@
 #include "airport_flight_stream.hpp"
 #include "airport_take_flight.hpp"
 #include "storage/airport_exchange.hpp"
-#include "yyjson.hpp"
 #include <numeric>
-
-using namespace duckdb_yyjson; // NOLINT
 
 namespace duckdb
 {

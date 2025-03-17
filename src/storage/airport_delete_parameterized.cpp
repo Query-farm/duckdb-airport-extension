@@ -20,11 +20,8 @@
 #include "airport_flight_stream.hpp"
 #include "airport_take_flight.hpp"
 #include "storage/airport_exchange.hpp"
-#include "yyjson.hpp"
 #include "duckdb/execution/operator/filter/physical_filter.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
-
-using namespace duckdb_yyjson; // NOLINT
 
 namespace duckdb
 {

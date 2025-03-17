@@ -21,9 +21,6 @@
 #include "airport_flight_stream.hpp"
 #include "airport_take_flight.hpp"
 #include "storage/airport_exchange.hpp"
-#include "yyjson.hpp"
-
-using namespace duckdb_yyjson; // NOLINT
 
 // Some improvements to make
 //
@@ -214,6 +211,12 @@ namespace duckdb
     return SinkResultType::NEED_MORE_INPUT;
   }
 
+  struct AirportDeleteFinalMetadata
+  {
+    uint64_t total_deleted;
+    MSGPACK_DEFINE_MAP(total_deleted)
+  };
+
   //===--------------------------------------------------------------------===//
   // Finalize
   //===--------------------------------------------------------------------===//
@@ -249,26 +252,24 @@ namespace duckdb
       {
         auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
 
-        // Try to parse the metadata
-        // Try to parse out a JSON document that contains a progress indicator
-        // that will update the scan data.
-
-        yyjson_doc *doc = yyjson_read((const char *)metadata.data(), metadata.size(), 0);
-        if (doc)
+        AirportDeleteFinalMetadata final_metadata;
+        try
         {
-          // Get the root object
-          yyjson_val *root = yyjson_doc_get_root(doc);
-          if (root && yyjson_is_obj(root))
-          {
-            yyjson_val *total_deleted_val = yyjson_obj_get(root, "total_deleted");
-            if (total_deleted_val && yyjson_is_int(total_deleted_val))
-            {
-              gstate.deleted_count = yyjson_get_int(total_deleted_val);
-            }
-          }
+          msgpack::object_handle oh = msgpack::unpack(
+              (const char *)metadata.data(),
+              metadata.size(),
+              0);
+          msgpack::object obj = oh.get();
+          obj.convert(final_metadata);
+          gstate.deleted_count = final_metadata.total_deleted;
         }
-        // Free the JSON document
-        yyjson_doc_free(doc);
+        catch (const std::exception &e)
+        {
+          throw AirportFlightException(gstate.table.table_data->location,
+                                       gstate.flight_descriptor,
+                                       "Failed to parse msgpack encoded object for final delete metadata.",
+                                       string(e.what()));
+        }
       }
     }
 
