@@ -35,7 +35,7 @@ namespace duckdb
       return access_mode;
     }
 
-    // The identifier returned from the server.
+    // The identifier returned from the Arrow flight server.
     std::optional<std::string> identifier;
 
   private:

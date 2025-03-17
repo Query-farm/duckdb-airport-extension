@@ -73,7 +73,8 @@ namespace duckdb
                                          ArrowSchema &send_schema,
                                          bool return_chunk,
                                          string exchange_operation,
-                                         vector<string> destination_chunk_column_names)
+                                         vector<string> destination_chunk_column_names,
+                                         std::optional<string> transaction_id)
   {
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         global_state->schema,
@@ -107,6 +108,11 @@ namespace duckdb
 
     // Indicate that we are doing a delete.
     call_options.headers.emplace_back("airport-operation", exchange_operation);
+
+    if (transaction_id.has_value() && !transaction_id.value().empty())
+    {
+      call_options.headers.emplace_back("airport-transaction-id", transaction_id.value());
+    }
 
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", return_chunk ? "1" : "0");

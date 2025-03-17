@@ -163,7 +163,7 @@ namespace duckdb
 
     auto insert_global_state = make_uniq<AirportInsertGlobalState>(context, table.get(), GetTypes(), return_chunk);
 
-    // auto &transaction = AirportTransaction::Get(context, insert_table->catalog);
+    auto &transaction = AirportTransaction::Get(context, insert_table->catalog);
     // auto &connection = transaction.GetConnection();
     auto [send_names, send_types] = AirportGetInsertColumns(*this, *table);
 
@@ -190,9 +190,15 @@ namespace duckdb
       returning_column_names.push_back(cd.GetName());
     }
 
-    AirportExchangeGetGlobalSinkState(context, *table.get(), *table, insert_global_state.get(),
-                                      send_schema, return_chunk, "insert",
-                                      returning_column_names);
+    AirportExchangeGetGlobalSinkState(context,
+                                      *table.get(),
+                                      *table,
+                                      insert_global_state.get(),
+                                      send_schema,
+                                      return_chunk,
+                                      "insert",
+                                      returning_column_names,
+                                      transaction.identifier);
 
     return std::move(insert_global_state);
   }

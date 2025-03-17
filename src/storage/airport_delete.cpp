@@ -109,6 +109,8 @@ namespace duckdb
 
     auto delete_global_state = make_uniq<AirportDeleteGlobalState>(context, airport_table, GetTypes(), return_chunk);
 
+    auto &transaction = AirportTransaction::Get(context, table.catalog);
+
     delete_global_state->send_types = {airport_table.GetRowIdType()};
     vector<string> send_names = {"rowid"};
     ArrowSchema send_schema;
@@ -123,7 +125,8 @@ namespace duckdb
     }
 
     AirportExchangeGetGlobalSinkState(context, table, airport_table, delete_global_state.get(), send_schema, return_chunk, "delete",
-                                      returning_column_names);
+                                      returning_column_names,
+                                      transaction.identifier);
 
     return std::move(delete_global_state);
   }

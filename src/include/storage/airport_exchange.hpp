@@ -61,5 +61,6 @@ namespace duckdb
                                          ArrowSchema &send_schema,
                                          bool return_chunk,
                                          string exchange_operation,
-                                         vector<string> returning_column_names);
+                                         vector<string> returning_column_names,
+                                         std::optional<string> transaction_id);
 }
