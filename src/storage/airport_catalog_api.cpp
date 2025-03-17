@@ -6,12 +6,14 @@
 #include <random>
 #include <string_view>
 #include <vector>
-#include <openssl/sha.h>
 #include <curl/curl.h>
 
 #include <arrow/flight/client.h>
+#include <arrow/flight/types.h>
 #include <arrow/buffer.h>
-
+#include <arrow/ipc/api.h>
+#include <arrow/io/memory.h>
+#include <arrow/c/bridge.h>
 #include "storage/airport_catalog_api.hpp"
 #include "storage/airport_catalog.hpp"
 
@@ -20,9 +22,7 @@
 #include "airport_macros.hpp"
 #include "airport_secrets.hpp"
 #include "airport_request_headers.hpp"
-#include <curl/curl.h>
-#include <arrow/ipc/api.h>
-#include <arrow/io/memory.h>
+#include "duckdb/common/arrow/schema_metadata.hpp"
 
 namespace flight = arrow::flight;
 
@@ -689,6 +689,50 @@ namespace duckdb
 
       return contents;
     }
+  }
+
+  LogicalType
+  AirportAPI::GetRowIdType(ClientContext &context,
+                           std::shared_ptr<arrow::flight::FlightInfo> flight_info,
+                           const string &location,
+                           const arrow::flight::FlightDescriptor &descriptor)
+  {
+    std::shared_ptr<arrow::Schema> info_schema;
+    arrow::ipc::DictionaryMemo dictionary_memo;
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
+                                                       flight_info->GetSchema(&dictionary_memo),
+                                                       location,
+                                                       descriptor,
+                                                       "");
+
+    ArrowSchemaWrapper schema_root;
+    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema,
+                                                             &schema_root.arrow_schema),
+                                                location,
+                                                descriptor,
+                                                "ExportSchema");
+
+    for (idx_t col_idx = 0;
+         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+    {
+      auto &schema = *schema_root.arrow_schema.children[col_idx];
+      if (!schema.release)
+      {
+        throw InvalidInputException("airport_take_flight: released schema passed");
+      }
+
+      if (schema.metadata != nullptr)
+      {
+        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
+        auto comment = column_metadata.GetOption("is_rowid");
+        if (!comment.empty())
+        {
+          auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+          return arrow_type->GetDuckType();
+        }
+      }
+    }
+    return LogicalType::INVALID;
   }
 
   unique_ptr<AirportSchemaCollection>
