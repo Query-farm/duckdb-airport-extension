@@ -732,7 +732,7 @@ namespace duckdb
         }
       }
     }
-    return LogicalType::INVALID;
+    return LogicalType::SQLNULL;
   }
 
   unique_ptr<AirportSchemaCollection>
