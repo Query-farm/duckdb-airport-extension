@@ -754,6 +754,7 @@ namespace duckdb
     }
 
     result->source = catalog_root.contents;
+    result->version_info = catalog_root.version_info;
 
     for (auto &schema : catalog_root.schemas)
     {

@@ -79,12 +79,14 @@ namespace duckdb
 
     std::optional<string> GetTransactionIdentifier();
 
+    // Track what version of the catalog has been loaded.
+    std::optional<AirportGetCatalogVersionResult> loaded_catalog_version;
+
   private:
     void DropSchema(ClientContext &context, DropInfo &info) override;
 
   private:
     AirportSchemaSet schemas;
     string default_schema;
-    std::optional<uint64_t> catalog_version_fixed;
   };
 }

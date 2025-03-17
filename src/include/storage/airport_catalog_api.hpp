@@ -56,6 +56,13 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(schema, description, tags, contents)
   };
 
+  struct AirportGetCatalogVersionResult
+  {
+    uint64_t catalog_version;
+    bool is_fixed;
+    MSGPACK_DEFINE(catalog_version, is_fixed)
+  };
+
   struct AirportSerializedCatalogRoot
   {
     // The contents of the catalog itself.
@@ -63,7 +70,10 @@ namespace duckdb
     // A list of schemas.
     std::vector<AirportSerializedSchema> schemas;
 
-    MSGPACK_DEFINE_MAP(contents, schemas)
+    // The version of the catalog returned.
+    AirportGetCatalogVersionResult version_info;
+
+    MSGPACK_DEFINE_MAP(contents, schemas, version_info)
   };
 
   struct AirportAPITable
@@ -145,6 +155,8 @@ namespace duckdb
     AirportSerializedContentsWithSHA256Hash source;
 
     vector<AirportAPISchema> schemas;
+
+    AirportGetCatalogVersionResult version_info;
   };
 
   // A collection of parsed items from a schema's metadata.

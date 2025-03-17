@@ -72,6 +72,8 @@ namespace duckdb
 
     auto returned_collection = AirportAPI::GetSchemas(catalog.GetName(), airport_catalog.credentials);
 
+    airport_catalog.loaded_catalog_version = returned_collection->version_info;
+
     collection = std::move(returned_collection);
 
     std::unordered_set<string> seen_schema_names;

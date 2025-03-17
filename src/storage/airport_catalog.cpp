@@ -33,18 +33,11 @@ namespace duckdb
   {
   }
 
-  struct GetCatalogVersionResult
-  {
-    uint64_t catalog_version;
-    bool is_fixed;
-    MSGPACK_DEFINE(catalog_version, is_fixed)
-  };
-
   optional_idx AirportCatalog::GetCatalogVersion(ClientContext &context)
   {
-    if (catalog_version_fixed)
+    if (loaded_catalog_version.has_value() && loaded_catalog_version.value().is_fixed)
     {
-      return catalog_version_fixed.value();
+      return loaded_catalog_version.value().catalog_version;
     }
 
     arrow::flight::FlightCallOptions call_options;
@@ -66,7 +59,7 @@ namespace duckdb
                                             "reading get_catalog_version action result");
 
     // Read it using msgpack.
-    GetCatalogVersionResult result;
+    AirportGetCatalogVersionResult result;
     try
     {
       msgpack::object_handle oh = msgpack::unpack(
@@ -82,10 +75,7 @@ namespace duckdb
                                    "File to parse msgpack encoded get_catalog_version response: " + string(e.what()));
     }
 
-    if (result.is_fixed)
-    {
-      catalog_version_fixed = result.catalog_version;
-    }
+    loaded_catalog_version = result;
 
     return result.catalog_version;
   }
