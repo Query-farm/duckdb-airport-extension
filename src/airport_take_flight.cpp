@@ -808,7 +808,7 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(json_filters, column_ids)
   };
 
-  static string BuildDynamicTicketData(const string &json_filters, const vector<idx_t> &column_ids, uint32_t *uncompressed_length, const string &location, const flight::FlightDescriptor &descriptor)
+  static string BuildCompressedTicketMetadata(const string &json_filters, const vector<idx_t> &column_ids, uint32_t *uncompressed_length, const string &location, const flight::FlightDescriptor &descriptor)
   {
     AirportTicketMetadataParameters params;
     params.json_filters = json_filters;
@@ -911,11 +911,11 @@ namespace duckdb
           // COLUMN_IDENTIFIER_ROW_ID that will be sent.
           //          auto joined_column_ids = join_vector_of_strings(convert_to_strings(input.column_ids), ',');
 
-          auto dynamic_ticket = BuildDynamicTicketData(bind_data.json_filters,
-                                                       input.column_ids,
-                                                       &uncompressed_length,
-                                                       bind_data.server_location,
-                                                       bind_data.scan_data->flight_descriptor());
+          auto dynamic_ticket = BuildCompressedTicketMetadata(bind_data.json_filters,
+                                                              input.column_ids,
+                                                              &uncompressed_length,
+                                                              bind_data.server_location,
+                                                              bind_data.scan_data->flight_descriptor());
 
           AirportAugmentedTicket augmented_ticket;
           augmented_ticket.ticket = server_ticket_contents;
