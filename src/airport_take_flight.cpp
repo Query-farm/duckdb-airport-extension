@@ -22,6 +22,7 @@
 #include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 #include "msgpack.hpp"
 #include "duckdb/storage/statistics/numeric_stats.hpp"
+#include "storage/airport_catalog.hpp"
 
 namespace duckdb
 {
@@ -154,16 +155,7 @@ namespace duckdb
 
     D_ASSERT(!take_flight_params.server_location.empty());
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto location, flight::Location::Parse(take_flight_params.server_location),
-                                                       take_flight_params.server_location,
-                                                       descriptor,
-                                                       "");
-
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto flight_client,
-                                                       flight::FlightClient::Connect(location),
-                                                       take_flight_params.server_location,
-                                                       descriptor,
-                                                       "");
+    auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location);
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_standard_headers(call_options, take_flight_params.server_location);
@@ -260,7 +252,7 @@ namespace duckdb
         (uintptr_t)scan_data.get());
 
     ret->scan_data = std::move(scan_data);
-    ret->flight_client = std::move(flight_client);
+    ret->flight_client = flight_client;
     ret->ticket = take_flight_params.ticket;
     ret->user_supplied_headers = take_flight_params.user_supplied_headers;
     ret->auth_token = take_flight_params.auth_token;

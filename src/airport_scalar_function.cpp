@@ -49,16 +49,7 @@ namespace duckdb
       send_schema = flight_send_schema;
 
       // Create the client
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto location, flight::Location::Parse(server_location),
-                                                         server_location,
-                                                         descriptor_,
-                                                         "");
-
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto flight_client,
-                                                         flight::FlightClient::Connect(location),
-                                                         server_location,
-                                                         descriptor_,
-                                                         "");
+      auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
       arrow::flight::FlightCallOptions call_options;
       airport_add_standard_headers(call_options, server_location);

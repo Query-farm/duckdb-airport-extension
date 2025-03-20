@@ -13,6 +13,7 @@
 #include "airport_macros.hpp"
 #include "airport_secrets.hpp"
 #include "airport_request_headers.hpp"
+#include "storage/airport_catalog.hpp"
 
 namespace flight = arrow::flight;
 
@@ -38,12 +39,12 @@ namespace duckdb
   struct ListFlightsGlobalState : public GlobalTableFunctionState
   {
   public:
-    std::unique_ptr<flight::FlightClient> flight_client_;
+    std::shared_ptr<flight::FlightClient> flight_client_;
     std::unique_ptr<flight::FlightListing> listing;
 
-    ListFlightsGlobalState(std::unique_ptr<flight::FlightClient> flight_client)
+    ListFlightsGlobalState(std::shared_ptr<flight::FlightClient> flight_client)
     {
-      flight_client_ = std::move(flight_client);
+      flight_client_ = flight_client;
     }
 
     idx_t MaxThreads() const override
@@ -55,12 +56,9 @@ namespace duckdb
     {
       auto &bind_data = input.bind_data->Cast<ListFlightsBindData>();
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto location,
-                                              flight::Location::Parse(bind_data.server_location), bind_data.server_location, "");
+      auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location);
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_client, flight::FlightClient::Connect(location), bind_data.server_location, "");
-
-      return make_uniq<ListFlightsGlobalState>(std::move(flight_client));
+      return make_uniq<ListFlightsGlobalState>(flight_client);
     }
   };
 
