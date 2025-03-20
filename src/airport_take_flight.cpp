@@ -800,35 +800,45 @@ namespace duckdb
     return compressed_str;
   }
 
-  static string BuildDynamicTicketData(const string &json_filters, const string &column_ids, uint32_t *uncompressed_length, const string &location, const flight::FlightDescriptor &descriptor)
+  struct AirportTicketMetadataParameters
   {
-    yyjson_mut_doc *doc = yyjson_mut_doc_new(nullptr);
-    yyjson_mut_val *root = yyjson_mut_obj(doc);
-    yyjson_mut_doc_set_root(doc, root);
+    std::string json_filters;
+    std::vector<idx_t> column_ids;
 
-    // Add key-value pairs to the JSON object
-    if (!json_filters.empty())
-    {
-      yyjson_mut_obj_add_str(doc, root, "airport-duckdb-json-filters", json_filters.c_str());
-    }
-    if (!column_ids.empty())
-    {
-      yyjson_mut_obj_add_str(doc, root, "airport-duckdb-column-ids", column_ids.c_str());
-    }
+    MSGPACK_DEFINE_MAP(json_filters, column_ids)
+  };
 
-    // Serialize the JSON document to a string
-    char *metadata_str = yyjson_mut_write(doc, 0, nullptr);
+  static string BuildDynamicTicketData(const string &json_filters, const vector<idx_t> &column_ids, uint32_t *uncompressed_length, const string &location, const flight::FlightDescriptor &descriptor)
+  {
+    AirportTicketMetadataParameters params;
+    params.json_filters = json_filters;
+    params.column_ids = column_ids;
 
-    auto metadata_doc_string = string(metadata_str);
+    std::stringstream packed_buffer;
+    msgpack::pack(packed_buffer, params);
 
+    auto metadata_doc_string = packed_buffer.str();
     *uncompressed_length = metadata_doc_string.size();
-
     auto compressed_metadata = CompressString(metadata_doc_string, location, descriptor);
-    free(metadata_str);
-    yyjson_mut_doc_free(doc);
 
     return compressed_metadata;
   }
+
+  struct AirportEndpointMetadata
+  {
+    bool supports_predicate_pushdown;
+
+    MSGPACK_DEFINE_MAP(supports_predicate_pushdown)
+  };
+
+  struct AirportAugmentedTicket
+  {
+    std::string ticket;
+    uint32_t metadata_uncompressed_length;
+    std::string metadata;
+
+    MSGPACK_DEFINE_MAP(ticket, metadata_uncompressed_length, metadata)
+  };
 
   unique_ptr<GlobalTableFunctionState> AirportArrowScanInitGlobal(ClientContext &context,
                                                                   TableFunctionInitInput &input)
@@ -870,8 +880,6 @@ namespace duckdb
       }
     }
 
-    // Rather than using the headers, check to see if the ticket starts with <TICKET_ALLOWS_METADATA>
-
     // FIXME: right now we're just requesting data from the first endpoint
     // of the flight, in the future we should scan data from all endpoints.
     //
@@ -879,36 +887,56 @@ namespace duckdb
     // if the server just returns a set of Parquet URLs or HTTP urls we should
     // request those instead.
 
-    auto server_ticket = bind_data.scan_data->flight_info_->endpoints()[0].ticket;
+    auto &first_endpoint = bind_data.scan_data->flight_info_->endpoints()[0];
+
+    auto server_ticket = first_endpoint.ticket;
     auto server_ticket_contents = server_ticket.ticket;
 
-    if (!bind_data.ticket.empty())
+    if (!first_endpoint.app_metadata.empty())
     {
-      server_ticket = flight::Ticket{bind_data.ticket};
-    }
-    else if (server_ticket_contents.find("<TICKET_ALLOWS_METADATA>") == 0)
-    {
-      // This ticket allows metadata to be supplied in the ticket.
+      try
+      {
+        msgpack::object_handle oh = msgpack::unpack(
+            (const char *)first_endpoint.app_metadata.data(),
+            first_endpoint.app_metadata.size(),
+            0);
+        msgpack::object obj = oh.get();
+        AirportEndpointMetadata endpoint_metadata;
+        obj.convert(endpoint_metadata);
 
-      auto ticket_without_preamble = server_ticket_contents.substr(strlen("<TICKET_ALLOWS_METADATA>"));
+        if (endpoint_metadata.supports_predicate_pushdown)
+        {
+          uint32_t uncompressed_length;
+          // So the column ids can be sent here but there is a special one.
+          // COLUMN_IDENTIFIER_ROW_ID that will be sent.
+          //          auto joined_column_ids = join_vector_of_strings(convert_to_strings(input.column_ids), ',');
 
-      // encode the length as a unsigned int32 in network byte order
-      uint32_t ticket_length = ticket_without_preamble.size();
-      auto ticket_length_bytes = std::string((char *)&ticket_length, sizeof(ticket_length));
+          auto dynamic_ticket = BuildDynamicTicketData(bind_data.json_filters,
+                                                       input.column_ids,
+                                                       &uncompressed_length,
+                                                       bind_data.server_location,
+                                                       bind_data.scan_data->flight_descriptor());
 
-      uint32_t uncompressed_length;
-      // So the column ids can be sent here but there is a special one.
-      // COLUMN_IDENTIFIER_ROW_ID that will be sent.
-      auto joined_column_ids = join_vector_of_strings(convert_to_strings(input.column_ids), ',');
+          AirportAugmentedTicket augmented_ticket;
+          augmented_ticket.ticket = server_ticket_contents;
+          augmented_ticket.metadata_uncompressed_length = uncompressed_length;
+          augmented_ticket.metadata = dynamic_ticket;
 
-      auto dynamic_ticket = BuildDynamicTicketData(bind_data.json_filters, joined_column_ids, &uncompressed_length, bind_data.server_location,
-                                                   bind_data.scan_data->flight_descriptor());
+          std::stringstream packed_buffer;
+          msgpack::pack(packed_buffer, augmented_ticket);
 
-      auto compressed_length_bytes = std::string((char *)&uncompressed_length, sizeof(uncompressed_length));
+          // Indicate that the ticket has been augmented with additional data.
+          call_options.headers.emplace_back("airport-augmented-ticket", "1");
 
-      auto manipulated_ticket_data = "<TICKET_WITH_METADATA>" + ticket_length_bytes + ticket_without_preamble + compressed_length_bytes + dynamic_ticket;
-
-      server_ticket = flight::Ticket{manipulated_ticket_data};
+          server_ticket = flight::Ticket{packed_buffer.str()};
+        }
+      }
+      catch (const std::exception &e)
+      {
+        // There could be application that don't support Airport metadata but have
+        // placed data in the app_metadata field, if we can't parse it just skip it.
+        server_ticket = flight::Ticket{bind_data.ticket};
+      }
     }
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
