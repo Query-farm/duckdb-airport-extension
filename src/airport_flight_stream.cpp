@@ -14,15 +14,20 @@
 #include <memory>
 #include <arrow/buffer.h>
 #include <arrow/util/align_util.h>
-#include "yyjson.hpp"
+#include "msgpack.hpp"
 
 /// File copied from
 /// https://github.com/duckdb/duckdb-wasm/blob/0ad10e7db4ef4025f5f4120be37addc4ebe29618/lib/src/arrow_stream_buffer.cc
 
-using namespace duckdb_yyjson; // NOLINT
-
 namespace duckdb
 {
+
+  struct AirportScannerProgress
+  {
+    double progress;
+
+    MSGPACK_DEFINE_MAP(progress)
+  };
 
   class FlightMetadataRecordBatchReaderAdapter : public arrow::RecordBatchReader
   {
@@ -59,25 +64,22 @@ namespace duckdb
           // especially since this wrapper will be used by more values.
           if (progress_)
           {
-            // Try to parse out a JSON document that contains a progress indicator
-            // that will update the scan data.
-            yyjson_doc *doc = yyjson_read((const char *)next.app_metadata->data(), next.app_metadata->size(), 0);
-            if (doc)
+
+            AirportScannerProgress progress_report;
+            try
             {
-              // Get the root object
-              yyjson_val *root = yyjson_doc_get_root(doc);
-              if (root && yyjson_is_obj(root))
-              {
-                yyjson_val *progress_val = yyjson_obj_get(root, "progress");
-                if (progress_val && yyjson_is_real(progress_val))
-                {
-                  double progress = yyjson_get_real(progress_val);
-                  *progress_ = progress; // Update the progress
-                }
-              }
+              msgpack::object_handle oh = msgpack::unpack(
+                  (const char *)next.app_metadata->data(),
+                  next.app_metadata->size(),
+                  0);
+              msgpack::object obj = oh.get();
+              obj.convert(progress_report);
+              *progress_ = progress_report.progress; // Update the progress
             }
-            // Free the JSON document
-            yyjson_doc_free(doc);
+            catch (const std::exception &e)
+            {
+              throw AirportFlightException(flight_server_location_, "File to parse msgpack encoded object progress message: " + string(e.what()));
+            }
           }
         }
         if (!next.data && !next.app_metadata)
