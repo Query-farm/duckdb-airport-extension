@@ -138,8 +138,8 @@ namespace duckdb
     return params;
   }
 
-  void AirportTakeFlightDetermineNamesAndTypes(
-      ArrowSchemaWrapper &schema_root,
+  static void AirportTakeFlightDetermineNamesAndTypes(
+      const ArrowSchemaWrapper &schema_root,
       ClientContext &context,
       vector<LogicalType> &return_types,
       vector<string> &names,
@@ -205,13 +205,12 @@ namespace duckdb
       const AirportTakeFlightParameters &take_flight_params,
       const flight::FlightDescriptor &descriptor,
       ClientContext &context,
-      TableFunctionBindInput &input,
+      const TableFunctionBindInput &input,
       vector<LogicalType> &return_types,
       vector<string> &names,
-      std::shared_ptr<flight::FlightInfo> *cached_flight_info_ptr,
-      std::shared_ptr<GetFlightInfoTableFunctionParameters> table_function_parameters)
+      std::shared_ptr<const flight::FlightInfo> *cached_flight_info_ptr,
+      std::shared_ptr<const GetFlightInfoTableFunctionParameters> table_function_parameters)
   {
-    printf("Doing airport bind\n");
     // Create a UID for tracing.
     const auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 
@@ -377,7 +376,7 @@ namespace duckdb
       throw BinderException("airport: take_flight_with_pointer, pointers to flight descriptor cannot be null");
     }
 
-    const auto info = reinterpret_cast<std::shared_ptr<flight::FlightInfo> *>(input.inputs[1].GetPointer());
+    const auto info = reinterpret_cast<std::shared_ptr<const flight::FlightInfo> *>(input.inputs[1].GetPointer());
 
     // The transaction identifier is passed as the 2nd argument.
     if (!input.inputs[2].IsNull())

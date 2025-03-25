@@ -29,13 +29,17 @@ namespace duckdb
   public:
     AirportTakeFlightScanData(
         const string &flight_server_location,
-        std::shared_ptr<flight::FlightInfo> flight_info,
-        std::shared_ptr<flight::FlightStreamReader> stream) : flight_server_location_(flight_server_location),
-                                                              flight_info_(flight_info),
-                                                              stream_(stream), progress_(0)
+        std::shared_ptr<const flight::FlightInfo> flight_info,
+        std::shared_ptr<flight::FlightStreamReader> stream) : flight_info_(flight_info),
+                                                              stream_(stream), progress_(0),
+                                                              flight_server_location_(flight_server_location)
     {
-      total_records_ = flight_info->total_records();
       flight_descriptor_ = flight_info->descriptor();
+    }
+
+    const std::string &server_location()
+    {
+      return flight_server_location_;
     }
 
     const flight::FlightDescriptor &flight_descriptor()
@@ -45,17 +49,16 @@ namespace duckdb
 
     const int64_t total_records()
     {
-      return total_records_;
+      return flight_info_->total_records();
     }
 
-    string flight_server_location_;
-    std::shared_ptr<flight::FlightInfo> flight_info_;
+    std::shared_ptr<const flight::FlightInfo> flight_info_;
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
     double progress_;
     string last_app_metadata_;
 
   private:
-    int64_t total_records_;
+    string flight_server_location_;
     flight::FlightDescriptor flight_descriptor_;
   };
 
@@ -106,7 +109,7 @@ namespace duckdb
     bool skip_producing_result_for_update_or_delete = false;
 
     // When doing a dynamic table function we need this.
-    std::shared_ptr<GetFlightInfoTableFunctionParameters> table_function_parameters;
+    std::shared_ptr<const GetFlightInfoTableFunctionParameters> table_function_parameters;
   };
 
   struct AirportFlightStreamReader : public arrow::RecordBatchReader
