@@ -146,7 +146,7 @@ namespace duckdb
       TableFunctionBindInput &input,
       vector<LogicalType> &return_types,
       vector<string> &names,
-      std::shared_ptr<flight::FlightInfo> *cached_info_ptr,
+      std::shared_ptr<flight::FlightInfo> *cached_flight_info_ptr,
       std::shared_ptr<GetFlightInfoTableFunctionParameters> table_function_parameters)
   {
 
@@ -178,14 +178,18 @@ namespace duckdb
       }
     }
 
+    // Sometimes the endpoints can just be used from the FlightInfo, but that may
+    // not often be the case, since the predicate pushdown information should be sent
+    // to get flight info.
+
     // Get the information about the flight, this will allow the
     // endpoint information to be returned.
     unique_ptr<AirportTakeFlightScanData> scan_data;
-    if (cached_info_ptr != nullptr)
+    if (cached_flight_info_ptr != nullptr)
     {
       scan_data = make_uniq<AirportTakeFlightScanData>(
           take_flight_params.server_location,
-          *cached_info_ptr,
+          *cached_flight_info_ptr,
           nullptr);
     }
     else
@@ -610,23 +614,7 @@ namespace duckdb
 
     std::string_view serialized_column_statistics(reinterpret_cast<const char *>(stats_buffer->body->data()), stats_buffer->body->size());
 
-    // No unpack the serialized result.
-    GetFlightColumnStatisticsResult col_stats;
-    memset(&col_stats, 0, sizeof(col_stats));
-    try
-    {
-      msgpack::object_handle oh = msgpack::unpack(
-          (const char *)stats_buffer->body->data(),
-          stats_buffer->body->size(),
-          0);
-      msgpack::object obj = oh.get();
-      obj.convert(col_stats);
-    }
-    catch (const std::exception &e)
-    {
-      throw AirportFlightException(data.server_location,
-                                   "File to parse msgpack encoded column statistics: " + string(e.what()));
-    }
+    AIRPORT_MSGPACK_UNPACK(GetFlightColumnStatisticsResult, col_stats, (*(stats_buffer->body)), data.server_location, "File to parse msgpack encoded column statistics");
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), data.server_location, "");
 
@@ -896,13 +884,8 @@ namespace duckdb
     {
       try
       {
-        msgpack::object_handle oh = msgpack::unpack(
-            (const char *)first_endpoint.app_metadata.data(),
-            first_endpoint.app_metadata.size(),
-            0);
-        msgpack::object obj = oh.get();
-        AirportEndpointMetadata endpoint_metadata;
-        obj.convert(endpoint_metadata);
+
+        AIRPORT_MSGPACK_UNPACK(AirportEndpointMetadata, endpoint_metadata, first_endpoint.app_metadata, bind_data.server_location, "File to parse msgpack encoded endpoint metadata");
 
         if (endpoint_metadata.supports_predicate_pushdown)
         {

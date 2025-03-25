@@ -64,22 +64,8 @@ namespace duckdb
           // especially since this wrapper will be used by more values.
           if (progress_)
           {
-
-            AirportScannerProgress progress_report;
-            try
-            {
-              msgpack::object_handle oh = msgpack::unpack(
-                  (const char *)next.app_metadata->data(),
-                  next.app_metadata->size(),
-                  0);
-              msgpack::object obj = oh.get();
-              obj.convert(progress_report);
-              *progress_ = progress_report.progress; // Update the progress
-            }
-            catch (const std::exception &e)
-            {
-              throw AirportFlightException(flight_server_location_, "File to parse msgpack encoded object progress message: " + string(e.what()));
-            }
+            AIRPORT_MSGPACK_UNPACK(AirportScannerProgress, progress_report, (*next.app_metadata), flight_server_location_, "File to parse msgpack encoded object progress message");
+            *progress_ = progress_report.progress; // Update the progress
           }
         }
         if (!next.data && !next.app_metadata)

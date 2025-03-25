@@ -332,24 +332,11 @@ namespace duckdb
       if (!gstate.scan_bind_data->scan_data->last_app_metadata_.empty())
       {
         auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
-        AirportUpdateFinalMetadata final_metadata;
-        try
-        {
-          msgpack::object_handle oh = msgpack::unpack(
-              (const char *)metadata.data(),
-              metadata.size(),
-              0);
-          msgpack::object obj = oh.get();
-          obj.convert(final_metadata);
-          gstate.update_count = final_metadata.total_updated;
-        }
-        catch (const std::exception &e)
-        {
-          throw AirportFlightException(gstate.table.table_data->location,
-                                       gstate.flight_descriptor,
-                                       "Failed to parse msgpack encoded object for final update metadata.",
-                                       string(e.what()));
-        }
+        AIRPORT_MSGPACK_UNPACK(AirportUpdateFinalMetadata, final_metadata,
+                               metadata,
+                               gstate.table.table_data->location,
+                               "Failed to parse msgpack encoded object for final update metadata.");
+        gstate.update_count = final_metadata.total_updated;
       }
     }
 

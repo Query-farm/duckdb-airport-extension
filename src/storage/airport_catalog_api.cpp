@@ -473,19 +473,10 @@ namespace duckdb
         action_name, description)
   };
 
-  static std::unique_ptr<SerializedFlightAppMetadata> ParseFlightAppMetadata(const string &app_metadata)
+  static std::unique_ptr<SerializedFlightAppMetadata> ParseFlightAppMetadata(const string &app_metadata, const string &server_location)
   {
-    SerializedFlightAppMetadata app_metadata_obj;
-    try
-    {
-      msgpack::object_handle oh = msgpack::unpack((const char *)app_metadata.data(), app_metadata.size(), 0);
-      msgpack::object obj = oh.get();
-      obj.convert(app_metadata_obj);
-    }
-    catch (const std::exception &e)
-    {
-      throw InvalidInputException("File to parse MsgPack object describing in Arrow Flight app_metadata %s", e.what());
-    }
+    AIRPORT_MSGPACK_UNPACK(SerializedFlightAppMetadata, app_metadata_obj, app_metadata, server_location, "Failed to parse Flight app_metadata");
+
     return std::make_unique<SerializedFlightAppMetadata>(app_metadata_obj);
   }
 
@@ -496,7 +487,7 @@ namespace duckdb
                                   const std::shared_ptr<arrow::flight::FlightInfo> &flight_info,
                                   unique_ptr<AirportSchemaContents> &contents)
   {
-    auto parsed_app_metadata = ParseFlightAppMetadata(app_metadata);
+    auto parsed_app_metadata = ParseFlightAppMetadata(app_metadata, location);
     if (!(parsed_app_metadata->catalog == target_catalog && parsed_app_metadata->schema == target_schema))
     {
       throw IOException("Mismatch in metadata for catalog " + parsed_app_metadata->catalog + " schema " + parsed_app_metadata->schema + " expected " + target_catalog + " schema " + target_schema);
@@ -619,22 +610,7 @@ namespace duckdb
       url_contents = get_response.second;
 
       // So this data has this layout
-
-      AirportSerializedCompressedContent compressed_content;
-      try
-      {
-        msgpack::object_handle oh = msgpack::unpack(
-            (const char *)url_contents.data(),
-            url_contents.size(),
-            0);
-        msgpack::object obj = oh.get();
-        obj.convert(compressed_content);
-      }
-      catch (const std::exception &e)
-      {
-        throw AirportFlightException(credentials->location,
-                                     "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
-      }
+      AIRPORT_MSGPACK_UNPACK(AirportSerializedCompressedContent, compressed_content, url_contents, credentials->location, "File to parse msgpack encoded object AirportSerializedCompressedContent");
 
       auto decompressed_url_contents = decompressZStandard(compressed_content.data, compressed_content.length, credentials->location);
 
@@ -642,6 +618,7 @@ namespace duckdb
           (const char *)decompressed_url_contents.data(),
           compressed_content.length,
           0);
+      // FIXME: put this in the try/catch block since it could fail.
       std::vector<std::string> unpacked_data = oh.get().as<std::vector<std::string>>();
 
       for (auto item : unpacked_data)
@@ -766,36 +743,19 @@ namespace duckdb
       throw AirportFlightException(credentials->location, "Failed to obtain schema data from Arrow Flight server via DoAction()");
     }
 
-    AirportSerializedCompressedContent compressed_content;
-    try
-    {
-      auto &body_buffer = msgpack_serialized_response.get()->body;
-
-      msgpack::object_handle oh = msgpack::unpack(
-          (const char *)body_buffer->data(),
-          body_buffer->size(),
-          0);
-      msgpack::object obj = oh.get();
-      obj.convert(compressed_content);
-    }
-    catch (const std::exception &e)
-    {
-      throw AirportFlightException(credentials->location, "File to parse msgpack encoded object describing Arrow Flight schema data: " + string(e.what()));
-    }
+    auto &body_buffer = msgpack_serialized_response.get()->body;
+    AIRPORT_MSGPACK_UNPACK(AirportSerializedCompressedContent, compressed_content,
+                           (*body_buffer),
+                           credentials->location,
+                           "File to parse msgpack encoded object describing Arrow Flight schema data");
 
     auto decompressed_schema_data = decompressZStandard(compressed_content.data, compressed_content.length, credentials->location);
 
-    AirportSerializedCatalogRoot catalog_root;
-    try
-    {
-      msgpack::object_handle oh = msgpack::unpack((const char *)decompressed_schema_data.data(), decompressed_schema_data.size(), 0);
-      msgpack::object obj = oh.get();
-      obj.convert(catalog_root);
-    }
-    catch (const std::exception &e)
-    {
-      throw InvalidInputException("Failed to parse MsgPack object describing catalog root %s", e.what());
-    }
+    AIRPORT_MSGPACK_UNPACK(AirportSerializedCatalogRoot,
+                           catalog_root,
+                           decompressed_schema_data,
+                           credentials->location,
+                           "Failed to parse MsgPack object describing catalog root");
 
     result->source = catalog_root.contents;
     result->version_info = catalog_root.version_info;

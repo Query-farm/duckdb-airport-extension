@@ -49,3 +49,20 @@
 
 #define AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(lhs, rexpr, location, message) \
   AIRPORT_FLIGHT_ASSIGN_OR_RAISE_IMPL_LOCATION(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), lhs, rexpr, location, message);
+
+#define AIRPORT_MSGPACK_UNPACK(destination_type, destination_name, source, location, message) \
+  destination_type destination_name;                                                          \
+  memset(&destination_name, 0, sizeof(destination_type));                                     \
+  try                                                                                         \
+  {                                                                                           \
+    msgpack::object_handle oh = msgpack::unpack(                                              \
+        (const char *)source.data(),                                                          \
+        source.size(),                                                                        \
+        0);                                                                                   \
+    msgpack::object obj = oh.get();                                                           \
+    obj.convert(destination_name);                                                            \
+  }                                                                                           \
+  catch (const std::exception &e)                                                             \
+  {                                                                                           \
+    throw AirportFlightException(location, message + string(e.what()));                       \
+  }

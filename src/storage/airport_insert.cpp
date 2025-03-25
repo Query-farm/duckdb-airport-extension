@@ -373,24 +373,12 @@ namespace duckdb
       {
         auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
 
-        AirportInsertFinalMetadata final_metadata;
-        try
-        {
-          msgpack::object_handle oh = msgpack::unpack(
-              (const char *)metadata.data(),
-              metadata.size(),
-              0);
-          msgpack::object obj = oh.get();
-          obj.convert(final_metadata);
-          gstate.insert_count = final_metadata.total_inserted;
-        }
-        catch (const std::exception &e)
-        {
-          throw AirportFlightException(gstate.table->table_data->location,
-                                       gstate.flight_descriptor,
-                                       "Failed to parse msgpack encoded object for final insert metadata.",
-                                       string(e.what()));
-        }
+        AIRPORT_MSGPACK_UNPACK(
+            AirportInsertFinalMetadata, final_metadata,
+            metadata,
+            gstate.table->table_data->location,
+            "Failed to parse msgpack encoded object for final insert metadata.");
+        gstate.insert_count = final_metadata.total_inserted;
       }
     }
 

@@ -148,24 +148,11 @@ namespace duckdb
         auto check_constraints = schema_metadata.GetOption("check_constraints");
         if (!check_constraints.empty())
         {
-
-          AirportTableCheckConstraints table_constraints;
-          try
-          {
-            msgpack::object_handle oh = msgpack::unpack(
-                (const char *)check_constraints.c_str(),
-                check_constraints.size(),
-                0);
-            msgpack::object obj = oh.get();
-            obj.convert(table_constraints);
-          }
-          catch (const std::exception &e)
-          {
-            throw AirportFlightException(airport_catalog.credentials->location,
-                                         table.flight_info->descriptor(),
-                                         "File to parse msgpack encoded table check constraints.",
-                                         string(e.what()));
-          }
+          AIRPORT_MSGPACK_UNPACK(
+              AirportTableCheckConstraints, table_constraints,
+              check_constraints,
+              airport_catalog.credentials->location,
+              "File to parse msgpack encoded table check constraints.");
 
           for (auto &expression : table_constraints.constraints)
           {

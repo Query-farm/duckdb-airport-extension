@@ -50,22 +50,13 @@ namespace duckdb
                                             credentials->location,
                                             "reading get_transaction_identifier action result");
 
-    // Read it using msgpack.
-    GetTransactionIdentifierResult result;
-    try
-    {
-      msgpack::object_handle oh = msgpack::unpack(
-          (const char *)result_buffer->body->data(),
-          result_buffer->body->size(),
-          0);
-      msgpack::object obj = oh.get();
-      obj.convert(result);
-    }
-    catch (const std::exception &e)
-    {
-      throw AirportFlightException(credentials->location,
-                                   "File to parse msgpack encoded get_transaction_identifier response: " + string(e.what()));
-    }
+    AIRPORT_MSGPACK_UNPACK(
+        GetTransactionIdentifierResult, result,
+        (*(result_buffer->body)),
+        credentials->location,
+        "File to parse msgpack encoded get_transaction_identifier response");
+
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), credentials->location, "");
 
     return result.identifier;
   }

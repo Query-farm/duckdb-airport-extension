@@ -58,22 +58,10 @@ namespace duckdb
                                             credentials->location,
                                             "reading get_catalog_version action result");
 
-    // Read it using msgpack.
-    AirportGetCatalogVersionResult result;
-    try
-    {
-      msgpack::object_handle oh = msgpack::unpack(
-          (const char *)serialized_catalog_version_buffer->body->data(),
-          serialized_catalog_version_buffer->body->size(),
-          0);
-      msgpack::object obj = oh.get();
-      obj.convert(result);
-    }
-    catch (const std::exception &e)
-    {
-      throw AirportFlightException(credentials->location,
-                                   "File to parse msgpack encoded get_catalog_version response: " + string(e.what()));
-    }
+    AIRPORT_MSGPACK_UNPACK(AirportGetCatalogVersionResult, result,
+                           (*serialized_catalog_version_buffer->body),
+                           credentials->location,
+                           "File to parse msgpack encoded get_catalog_version response");
 
     loaded_catalog_version = result;
 
