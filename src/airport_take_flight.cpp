@@ -138,6 +138,68 @@ namespace duckdb
     return params;
   }
 
+  void AirportTakeFlightDetermineNamesAndTypes(
+      ArrowSchemaWrapper &schema_root,
+      ClientContext &context,
+      vector<LogicalType> &return_types,
+      vector<string> &names,
+      ArrowTableType &arrow_table,
+      idx_t &rowid_column_index)
+  {
+    rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
+    for (idx_t col_idx = 0;
+         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+    {
+      auto &schema = *schema_root.arrow_schema.children[col_idx];
+      if (!schema.release)
+      {
+        throw InvalidInputException("airport_take_flight: released schema passed");
+      }
+      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+
+      // Determine if the column is the rowid column by looking at the metadata
+      // on the column.
+      bool is_rowid_column = false;
+      if (schema.metadata != nullptr)
+      {
+        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
+
+        auto comment = column_metadata.GetOption("is_rowid");
+        if (!comment.empty())
+        {
+          is_rowid_column = true;
+          rowid_column_index = col_idx;
+        }
+      }
+
+      if (schema.dictionary)
+      {
+        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
+        arrow_type->SetDictionary(std::move(dictionary_type));
+      }
+
+      if (!is_rowid_column)
+      {
+        return_types.emplace_back(arrow_type->GetDuckType());
+      }
+
+      arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
+
+      auto format = string(schema.format);
+      auto name = string(schema.name);
+      if (name.empty())
+      {
+        name = string("v") + to_string(col_idx);
+      }
+      if (!is_rowid_column)
+      {
+        names.push_back(name);
+      }
+      // printf("Added column with id %lld %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, name.c_str());
+    }
+    QueryResult::DeduplicateColumns(names);
+  }
+
   unique_ptr<FunctionData>
   AirportTakeFlightBindWithFlightDescriptor(
       const AirportTakeFlightParameters &take_flight_params,
@@ -149,11 +211,17 @@ namespace duckdb
       std::shared_ptr<flight::FlightInfo> *cached_flight_info_ptr,
       std::shared_ptr<GetFlightInfoTableFunctionParameters> table_function_parameters)
   {
-
+    printf("Doing airport bind\n");
     // Create a UID for tracing.
-    auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
+    const auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 
     D_ASSERT(!take_flight_params.server_location.empty());
+
+    // The main thing that needs to be answered in this function
+    // are the names and return types and establishing the bind data.
+    //
+    // If the cached_flight_info_ptr is not null we should use the schema
+    // from that flight info otherwise it should be requested.
 
     auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location);
 
@@ -177,10 +245,6 @@ namespace duckdb
         call_options.headers.emplace_back(header_pair.first, header_value);
       }
     }
-
-    // Sometimes the endpoints can just be used from the FlightInfo, but that may
-    // not often be the case, since the predicate pushdown information should be sent
-    // to get flight info.
 
     // Get the information about the flight, this will allow the
     // endpoint information to be returned.
@@ -277,57 +341,8 @@ namespace duckdb
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &data.schema_root.arrow_schema), take_flight_params.server_location, descriptor, "ExportSchema");
 
-    for (idx_t col_idx = 0;
-         col_idx < (idx_t)data.schema_root.arrow_schema.n_children; col_idx++)
-    {
-      auto &schema = *data.schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
-      {
-        throw InvalidInputException("airport_take_flight: released schema passed");
-      }
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+    AirportTakeFlightDetermineNamesAndTypes(data.schema_root, context, return_types, names, data.arrow_table, ret->rowid_column_index);
 
-      // Determine if the column is the rowid column by looking at the metadata
-      // on the column.
-      bool is_rowid_column = false;
-      if (schema.metadata != nullptr)
-      {
-        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
-
-        auto comment = column_metadata.GetOption("is_rowid");
-        if (!comment.empty())
-        {
-          is_rowid_column = true;
-          ret->rowid_column_index = col_idx;
-        }
-      }
-
-      if (schema.dictionary)
-      {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
-        arrow_type->SetDictionary(std::move(dictionary_type));
-      }
-
-      if (!is_rowid_column)
-      {
-        return_types.emplace_back(arrow_type->GetDuckType());
-      }
-
-      ret->arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
-
-      auto format = string(schema.format);
-      auto name = string(schema.name);
-      if (name.empty())
-      {
-        name = string("v") + to_string(col_idx);
-      }
-      if (!is_rowid_column)
-      {
-        names.push_back(name);
-      }
-      // printf("Added column with id %lld %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, name.c_str());
-    }
-    QueryResult::DeduplicateColumns(names);
     return std::move(ret);
   }
 
@@ -832,7 +847,6 @@ namespace duckdb
                                                                   TableFunctionInitInput &input)
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
-
     auto result = make_uniq<ArrowScanGlobalState>();
 
     arrow::flight::FlightCallOptions call_options;
