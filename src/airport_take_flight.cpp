@@ -922,20 +922,39 @@ namespace duckdb
       }
     }
 
+    if (first_endpoint.locations.size() > 1)
+    {
+      throw AirportFlightException(bind_data.server_location, "Multiple locations exist for a flight endpoint, only single locations are supported");
+    }
+
+    // Since we're single threaded, we can only really use a single thread at a time.
+    result->max_threads = 1;
+
+    auto &first_location = first_endpoint.locations[0];
+
+    std::shared_ptr<flight::FlightClient> client = bind_data.flight_client;
+    auto server_location = first_location.ToString();
+    if (first_location != flight::Location::ReuseConnection())
+    {
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto location_client,
+                                              flight::FlightClient::Connect(first_location),
+                                              first_location.ToString(),
+                                              "");
+      client = std::move(location_client);
+      server_location = bind_data.server_location;
+    }
+
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         bind_data.scan_data->stream_,
-        bind_data.flight_client->DoGet(
+        client->DoGet(
             call_options,
             server_ticket),
-        bind_data.server_location,
+        server_location,
         bind_data.scan_data->flight_descriptor(),
         "");
 
     //    bind_data.scan_data->stream_ = std::move(flight_stream);
     result->stream = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get());
-
-    // Since we're single threaded, we can only really use a single thread at a time.
-    result->max_threads = 1;
 
     return std::move(result);
   }
