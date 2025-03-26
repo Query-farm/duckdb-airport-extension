@@ -9,6 +9,12 @@
 
 namespace duckdb
 {
+  struct AirportArrowScanGlobalState : public ArrowScanGlobalState
+  {
+    vector<flight::FlightEndpoint> endpoints;
+    idx_t current_endpoint = 0;
+  };
+
   unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(const ArrowScanFunctionData &function,
                                                               const vector<column_t> &column_ids,
                                                               TableFilterSet *filters);

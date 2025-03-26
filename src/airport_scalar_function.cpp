@@ -196,7 +196,7 @@ namespace duckdb
 
       // Just fake a single column index.
       vector<column_t> column_ids = {0};
-      scan_global_state = make_uniq<ArrowScanGlobalState>();
+      scan_global_state = make_uniq<AirportArrowScanGlobalState>();
       scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<ArrowScanFunctionData>(), column_ids, nullptr);
 
       // There shouldn't be any projection ids.
@@ -220,7 +220,7 @@ namespace duckdb
     string server_location_;
     flight::FlightDescriptor descriptor_;
     std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data;
-    std::unique_ptr<ArrowScanGlobalState> scan_global_state;
+    std::unique_ptr<AirportArrowScanGlobalState> scan_global_state;
     std::unique_ptr<ArrowArrayStreamWrapper> reader;
     std::unique_ptr<ArrowScanLocalState> scan_local_state;
     std::unique_ptr<arrow::flight::FlightStreamWriter> writer;

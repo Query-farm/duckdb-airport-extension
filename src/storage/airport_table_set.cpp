@@ -1036,7 +1036,7 @@ namespace duckdb
     // There shouldn't be any projection ids.
     vector<idx_t> projection_ids;
 
-    auto scan_global_state = make_uniq<ArrowScanGlobalState>();
+    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>();
     scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<ArrowScanFunctionData>(), column_ids, nullptr);
     scan_global_state->max_threads = 1;
 
@@ -1116,7 +1116,7 @@ namespace duckdb
     {
       auto &data = global_state.scan_table_function_input->bind_data->CastNoConst<ArrowScanFunctionData>();
       auto &state = global_state.scan_table_function_input->local_state->Cast<ArrowScanLocalState>();
-      auto &global_state2 = global_state.scan_table_function_input->global_state->Cast<ArrowScanGlobalState>();
+      auto &global_state2 = global_state.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
       auto current_chunk = global_state2.stream->GetNextChunk();
       state.chunk = std::move(current_chunk);
@@ -1153,7 +1153,7 @@ namespace duckdb
       auto &scan_data = global_state.scan_table_function_input;
       auto &data = scan_data->bind_data->CastNoConst<ArrowScanFunctionData>();
       auto &state = scan_data->local_state->Cast<ArrowScanLocalState>();
-      auto &global_state2 = scan_data->global_state->Cast<ArrowScanGlobalState>();
+      auto &global_state2 = scan_data->global_state->Cast<AirportArrowScanGlobalState>();
 
       auto current_chunk = global_state2.stream->GetNextChunk();
       state.chunk = std::move(current_chunk);

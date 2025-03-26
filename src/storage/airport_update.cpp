@@ -254,7 +254,7 @@ namespace duckdb
       {
         auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<ArrowScanFunctionData>(); // FIXME
         auto &state = gstate.scan_table_function_input->local_state->Cast<ArrowScanLocalState>();
-        auto &global_state = gstate.scan_table_function_input->global_state->Cast<ArrowScanGlobalState>();
+        auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
         state.Reset();
 
@@ -322,7 +322,7 @@ namespace duckdb
     {
       //      auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<ArrowScanFunctionData>(); // FIXME
       auto &state = gstate.scan_table_function_input->local_state->Cast<ArrowScanLocalState>();
-      auto &global_state = gstate.scan_table_function_input->global_state->Cast<ArrowScanGlobalState>();
+      auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
       state.Reset();
 

@@ -426,7 +426,7 @@ namespace duckdb
     }
     auto &data = data_p.bind_data->CastNoConst<ArrowScanFunctionData>();
     auto &state = data_p.local_state->Cast<ArrowScanLocalState>();
-    auto &global_state = data_p.global_state->Cast<ArrowScanGlobalState>();
+    auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
     auto &airport_bind_data = data_p.bind_data->Cast<AirportTakeFlightBindData>();
 
     //! Out of tuples in this chunk
@@ -925,9 +925,7 @@ namespace duckdb
                                                                   TableFunctionInitInput &input)
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
-    auto result = make_uniq<ArrowScanGlobalState>();
-
-    vector<flight::FlightEndpoint> endpoints;
+    auto result = make_uniq<AirportArrowScanGlobalState>();
 
     // Ideally this is where we call GetFlightInfo to obtain the endpoints, but
     // GetFlightInfo can't take the predicate information, so we'll need to call an
@@ -943,14 +941,14 @@ namespace duckdb
                        bind_data.flight_client,
                        bind_data.json_filters,
                        input.column_ids,
-                       endpoints);
+                       result->endpoints);
 
-    D_ASSERT(endpoints.size() == 1);
+    D_ASSERT(result->endpoints.size() == 1);
 
     // Each endpoint can be processed on a different thread.
-    result->max_threads = endpoints.size();
+    result->max_threads = result->endpoints.size();
 
-    auto &first_endpoint = endpoints[0];
+    auto &first_endpoint = result->endpoints[0];
     auto &first_location = first_endpoint.locations[0];
 
     std::shared_ptr<flight::FlightClient> client = bind_data.flight_client;
