@@ -123,17 +123,14 @@ namespace duckdb
       // D_ASSERT(schema.name == table.schema_name);
       CreateTableInfo info;
 
-      info.table = table.name;
-      info.comment = table.comment;
+      info.table = table.name();
+      info.comment = table.comment();
 
-      std::shared_ptr<arrow::Schema> info_schema;
-      arrow::ipc::DictionaryMemo dictionary_memo;
-      string error_location = "(" + airport_catalog.credentials->location + ")";
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema, table.flight_info->GetSchema(&dictionary_memo), airport_catalog.credentials->location, table.flight_info->descriptor(), "");
+      std::shared_ptr<arrow::Schema> info_schema = table.schema();
 
       ArrowSchema arrow_schema;
 
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials->location, table.flight_info->descriptor(), "ExportSchema");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials->location, table.descriptor(), "ExportSchema");
 
       vector<string> column_names;
       vector<duckdb::LogicalType> return_types;
@@ -159,7 +156,7 @@ namespace duckdb
             auto expression_list = Parser::ParseExpressionList(expression, context.GetParserOptions());
             if (expression_list.size() != 1)
             {
-              throw ParserException("Failed to parse CHECK constraint expression: " + expression + " for table " + table.name);
+              throw ParserException("Failed to parse CHECK constraint expression: " + expression + " for table " + table.name());
             }
             info.constraints.push_back(make_uniq<CheckConstraint>(std::move(expression_list[0])));
           }
@@ -374,16 +371,12 @@ namespace duckdb
 
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, rowid_type);
-    AirportAPITable new_table(
-        airport_catalog.credentials->location,
-        flight_info,
-        base.catalog,
-        base.schema,
-        base.table,
-        string(""));
-
-    new_table.flight_info = std::move(flight_info);
-    table_entry->table_data = make_uniq<AirportAPITable>(new_table);
+    table_entry->table_data = make_uniq<AirportAPITable>(airport_catalog.credentials->location,
+                                                         flight_info,
+                                                         base.catalog,
+                                                         base.schema,
+                                                         base.table,
+                                                         string(""));
 
     return CreateEntry(std::move(table_entry));
   }
@@ -937,8 +930,8 @@ namespace duckdb
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
         bind_data.server_location,
-        // This flight info will be correctly populated from the bind.
-        bind_data.scan_data->flight_info_,
+        bind_data.scan_data->flight_descriptor(),
+        bind_data.scan_data->schema(),
         std::move(exchange_result.reader));
 
     auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
@@ -953,7 +946,7 @@ namespace duckdb
     vector<column_t> column_ids;
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto read_schema,
-                                                       scan_bind_data->scan_data->stream_->GetSchema(),
+                                                       scan_bind_data->scan_data->stream()->GetSchema(),
                                                        bind_data.server_location,
                                                        flight_descriptor, "");
 

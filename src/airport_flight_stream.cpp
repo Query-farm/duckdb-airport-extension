@@ -169,7 +169,7 @@ namespace duckdb
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto reader,
         FlightMakeRecordBatchReader(
-            buffer_data->stream_,
+            buffer_data->stream(),
             buffer_data->server_location(),
             buffer_data->flight_descriptor(),
             &buffer_data->progress_,
@@ -206,17 +206,10 @@ namespace duckdb
     // Rusty: this cast needs to be checked to make sure its valid.
     auto reader = reinterpret_cast<std::shared_ptr<AirportTakeFlightScanData> *>(buffer_ptr);
 
-    std::shared_ptr<arrow::Schema> info_schema;
     arrow::ipc::DictionaryMemo dictionary_memo;
     const auto actual_reader = reader->get();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
-                                                       actual_reader->flight_info_->GetSchema(&dictionary_memo),
-                                                       actual_reader->server_location(),
-                                                       actual_reader->flight_descriptor(),
-                                                       "");
-
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &schema.arrow_schema), actual_reader->server_location(), actual_reader->flight_descriptor(), "ExportSchema");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*actual_reader->schema(), &schema.arrow_schema), actual_reader->server_location(), actual_reader->flight_descriptor(), "ExportSchema");
   }
 
   shared_ptr<ArrowArrayWrapper> AirportArrowArrayStreamWrapper::GetNextChunk()

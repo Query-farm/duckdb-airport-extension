@@ -5,6 +5,7 @@
 #include <arrow/flight/client.h>
 #include <curl/curl.h>
 #include <msgpack.hpp>
+#include "airport_macros.hpp"
 
 namespace duckdb
 {
@@ -78,27 +79,74 @@ namespace duckdb
 
   struct AirportAPITable
   {
-    string location;
-    std::shared_ptr<arrow::flight::FlightInfo> flight_info;
-
-    string catalog_name;
-    string schema_name;
-    string name;
-    string comment;
 
     AirportAPITable(
-        const std::string &location,
+        const std::string &server_location,
         std::shared_ptr<arrow::flight::FlightInfo> flightInfo,
         const std::string &catalog,
         const std::string &schema,
         const std::string &tableName,
         const std::string &tableComment)
-        : location(location),
-          flight_info(flightInfo),
-          catalog_name(catalog),
-          schema_name(schema),
-          name(tableName),
-          comment(tableComment) {}
+        : server_location_(server_location),
+          catalog_name_(catalog),
+          schema_name_(schema),
+          name_(tableName),
+          comment_(tableComment)
+    {
+      descriptor_ = flightInfo->descriptor();
+
+      arrow::ipc::DictionaryMemo dictionary_memo;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(schema_,
+                                                         flightInfo->GetSchema(&dictionary_memo),
+                                                         server_location_,
+                                                         descriptor_,
+                                                         "");
+    }
+
+    const std::string &server_location() const
+    {
+      return server_location_;
+    }
+
+    const flight::FlightDescriptor &descriptor() const
+    {
+      return descriptor_;
+    }
+
+    const std::shared_ptr<arrow::Schema> schema() const
+    {
+      return schema_;
+    }
+
+    const std::string &catalog_name() const
+    {
+      return catalog_name_;
+    }
+
+    const std::string &schema_name() const
+    {
+      return schema_name_;
+    }
+
+    const std::string &name() const
+    {
+      return name_;
+    }
+
+    const std::string &comment() const
+    {
+      return comment_;
+    }
+
+  private:
+    arrow::flight::FlightDescriptor descriptor_;
+    std::shared_ptr<arrow::Schema> schema_;
+
+    string server_location_;
+    string catalog_name_;
+    string schema_name_;
+    string name_;
+    string comment_;
   };
 
   struct AirportAPIScalarFunction

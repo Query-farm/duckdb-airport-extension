@@ -29,37 +29,49 @@ namespace duckdb
   public:
     AirportTakeFlightScanData(
         const string &flight_server_location,
-        std::shared_ptr<const flight::FlightInfo> flight_info,
-        std::shared_ptr<flight::FlightStreamReader> stream) : flight_info_(flight_info),
-                                                              stream_(stream), progress_(0),
-                                                              flight_server_location_(flight_server_location)
+        const flight::FlightDescriptor &flight_descriptor,
+        std::shared_ptr<arrow::Schema> schema,
+        std::shared_ptr<flight::FlightStreamReader> stream) : progress_(0),
+                                                              flight_server_location_(flight_server_location),
+                                                              flight_descriptor_(flight_descriptor),
+                                                              schema_(schema),
+                                                              stream_(stream)
     {
-      flight_descriptor_ = flight_info->descriptor();
     }
 
-    const std::string &server_location()
+    const std::string &server_location() const
     {
       return flight_server_location_;
     }
 
-    const flight::FlightDescriptor &flight_descriptor()
+    const flight::FlightDescriptor &flight_descriptor() const
     {
       return flight_descriptor_;
     }
 
-    const int64_t total_records()
+    const std::shared_ptr<arrow::Schema> schema() const
     {
-      return flight_info_->total_records();
+      return schema_;
     }
 
-    std::shared_ptr<const flight::FlightInfo> flight_info_;
-    std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
+    const std::shared_ptr<arrow::flight::FlightStreamReader> stream() const
+    {
+      return stream_;
+    }
+
+    void setStream(std::shared_ptr<arrow::flight::FlightStreamReader> stream)
+    {
+      stream_ = stream;
+    }
+
     double progress_;
     string last_app_metadata_;
 
   private:
     string flight_server_location_;
     flight::FlightDescriptor flight_descriptor_;
+    std::shared_ptr<arrow::Schema> schema_;
+    std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
   };
 
   struct GetFlightInfoTableFunctionParameters
@@ -110,6 +122,10 @@ namespace duckdb
 
     // When doing a dynamic table function we need this.
     std::shared_ptr<const GetFlightInfoTableFunctionParameters> table_function_parameters;
+
+    // Store the estimated number of records in the flight, typically this is
+    // returned from GetFlightInfo, but that could also come from the table itself.
+    int64_t estimated_records = -1;
   };
 
   struct AirportFlightStreamReader : public arrow::RecordBatchReader

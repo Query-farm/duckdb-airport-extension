@@ -31,7 +31,7 @@ namespace duckdb
   };
 
   AirportTakeFlightParameters AirportParseTakeFlightParameters(
-      string &server_location,
+      const string &server_location,
       ClientContext &context,
       TableFunctionBindInput &input);
 
@@ -42,7 +42,7 @@ namespace duckdb
       const TableFunctionBindInput &input,
       vector<LogicalType> &return_types,
       vector<string> &names,
-      std::shared_ptr<const arrow::flight::FlightInfo> *cached_info_ptr,
+      std::shared_ptr<arrow::Schema> schema,
       std::shared_ptr<const struct GetFlightInfoTableFunctionParameters> table_function_parameters);
 
 }

@@ -237,12 +237,12 @@ namespace duckdb
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, gstate.schema),
-        gstate.table.table_data->location,
+        gstate.table.table_data->server_location(),
         gstate.flight_descriptor, "");
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         gstate.writer->WriteRecordBatch(*record_batch),
-        gstate.table.table_data->location,
+        gstate.table.table_data->server_location(),
         gstate.flight_descriptor, "");
 
     // Since we wrote a batch I'd like to read the data returned if we are returning chunks.
@@ -312,11 +312,11 @@ namespace duckdb
     auto &gstate = input.global_state.Cast<AirportUpdateGlobalState>();
 
     // printf("AirportDelete::Finalize started, indicating that writing is done\n");
-    auto flight_descriptor = gstate.table.table_data->flight_info->descriptor();
+    auto flight_descriptor = gstate.table.table_data->descriptor();
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         gstate.writer->DoneWriting(),
-        gstate.table.table_data->location,
+        gstate.table.table_data->server_location(),
         gstate.flight_descriptor, "");
 
     {
@@ -334,7 +334,7 @@ namespace duckdb
         auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
         AIRPORT_MSGPACK_UNPACK(AirportUpdateFinalMetadata, final_metadata,
                                metadata,
-                               gstate.table.table_data->location,
+                               gstate.table.table_data->server_location(),
                                "Failed to parse msgpack encoded object for final update metadata.");
         gstate.update_count = final_metadata.total_updated;
       }

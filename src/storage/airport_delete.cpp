@@ -165,8 +165,9 @@ namespace duckdb
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, gstate.schema),
-        gstate.table.table_data->location,
-        gstate.flight_descriptor, "");
+        gstate.table.table_data->server_location(),
+        gstate.flight_descriptor,
+        "");
 
     // Acquire a lock because we don't want other threads to be writing to the same streams
     // at the same time.
@@ -174,7 +175,7 @@ namespace duckdb
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         gstate.writer->WriteRecordBatch(*record_batch),
-        gstate.table.table_data->location,
+        gstate.table.table_data->server_location(),
         gstate.flight_descriptor, "");
 
     // Since we wrote a batch I'd like to read the data returned if we are returning chunks.
@@ -226,11 +227,11 @@ namespace duckdb
     auto &gstate = input.global_state.Cast<AirportDeleteGlobalState>();
 
     // printf("AirportDelete::Finalize started, indicating that writing is done\n");
-    auto flight_descriptor = gstate.table.table_data->flight_info->descriptor();
+    auto flight_descriptor = gstate.table.table_data->descriptor();
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         gstate.writer->DoneWriting(),
-        gstate.table.table_data->location,
+        gstate.table.table_data->server_location(),
         gstate.flight_descriptor, "");
 
     // There should be a metadata message in the reader stream
@@ -254,7 +255,7 @@ namespace duckdb
 
         AIRPORT_MSGPACK_UNPACK(AirportDeleteFinalMetadata, final_metadata,
                                metadata,
-                               gstate.table.table_data->location,
+                               gstate.table.table_data->server_location(),
                                "Failed to parse msgpack encoded object for final delete metadata.");
         gstate.deleted_count = final_metadata.total_deleted;
       }

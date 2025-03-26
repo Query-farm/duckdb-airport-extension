@@ -42,19 +42,17 @@ namespace duckdb
   {
     auto &db = DatabaseInstance::GetDatabase(context);
     auto &airport_take_flight_function_set = ExtensionUtil::GetTableFunction(db, "airport_take_flight");
-    auto airport_take_flight_function = airport_take_flight_function_set.functions.GetFunctionByArguments(context, {LogicalType::VARCHAR, LogicalType::POINTER, LogicalType::VARCHAR});
+    auto airport_take_flight_function = airport_take_flight_function_set.functions.GetFunctionByArguments(context, {LogicalType::POINTER, LogicalType::VARCHAR});
 
     D_ASSERT(table_data);
-    D_ASSERT(table_data->flight_info != nullptr);
-    D_ASSERT(!table_data->location.empty());
 
     // How can we send the current transaction information.
     auto &transaction = AirportTransaction::Get(context, catalog);
 
     // Rusty: this is the place where the transformation happens between table functions and tables.
     vector<Value> inputs = {
-        table_data->location,
-        Value::POINTER((uintptr_t)&table_data->flight_info),
+        //        table_data->server_location(),
+        Value::POINTER((uintptr_t)table_data.get()),
         transaction.identifier.has_value() ? transaction.identifier.value() : ""};
 
     named_parameter_map_t param_map;

@@ -93,9 +93,16 @@ namespace duckdb
           descriptor_,
           "Begin schema");
 
+      std::shared_ptr<arrow::Schema> info_schema;
+      arrow::ipc::DictionaryMemo dictionary_memo;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
+                                                         flight_info->GetSchema(&dictionary_memo),
+                                                         server_location, flight_info->descriptor(), "");
+
       auto scan_data = make_uniq<AirportTakeFlightScanData>(
           server_location,
-          flight_info,
+          flight_info->descriptor(),
+          info_schema,
           std::move(exchange_result.reader));
 
       scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
@@ -106,7 +113,7 @@ namespace duckdb
 
       // Read the schema for the results being returned.
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto read_schema,
-                                                         scan_bind_data->scan_data->stream_->GetSchema(),
+                                                         scan_bind_data->scan_data->stream()->GetSchema(),
                                                          server_location,
                                                          descriptor_, "");
 
