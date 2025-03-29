@@ -24,6 +24,7 @@ namespace flight = arrow::flight;
 namespace duckdb
 {
 
+  // This is the structure that is passed to the function that can create the stream.
   struct AirportTakeFlightScanData
   {
   public:
@@ -74,7 +75,7 @@ namespace duckdb
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
   };
 
-  struct GetFlightInfoTableFunctionParameters
+  struct AirportGetFlightInfoTableFunctionParameters
   {
     std::string schema_name;
     std::string action_name;
@@ -121,7 +122,7 @@ namespace duckdb
     bool skip_producing_result_for_update_or_delete = false;
 
     // When doing a dynamic table function we need this.
-    std::shared_ptr<const GetFlightInfoTableFunctionParameters> table_function_parameters;
+    std::shared_ptr<const AirportGetFlightInfoTableFunctionParameters> table_function_parameters;
 
     // Store the estimated number of records in the flight, typically this is
     // returned from GetFlightInfo, but that could also come from the table itself.

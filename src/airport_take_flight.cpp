@@ -210,7 +210,7 @@ namespace duckdb
       vector<string> &names,
       // So rather than the cached_flight_info_ptr here we can just have the cached schema.
       std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<const GetFlightInfoTableFunctionParameters> table_function_parameters)
+      std::shared_ptr<const AirportGetFlightInfoTableFunctionParameters> table_function_parameters)
   {
     // Create a UID for tracing.
     const auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());

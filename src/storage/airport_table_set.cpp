@@ -730,7 +730,7 @@ namespace duckdb
     // the schema of the flight.
 
     // Then call the DoAction get_dynamic_flight_info with those arguments.
-    GetFlightInfoTableFunctionParameters tf_params;
+    AirportGetFlightInfoTableFunctionParameters tf_params;
     tf_params.parameters = string((char *)buffer->data(), buffer->size());
     tf_params.schema_name = function_info.function->schema_name;
     tf_params.action_name = function_info.function->action_name;
@@ -774,7 +774,7 @@ namespace duckdb
         function_info.function->flight_info->descriptor(),
         context,
         input, return_types, names, nullptr,
-        std::make_shared<GetFlightInfoTableFunctionParameters>(tf_params));
+        std::make_shared<AirportGetFlightInfoTableFunctionParameters>(tf_params));
   }
 
   struct ArrowSchemaTableFunctionTypes
