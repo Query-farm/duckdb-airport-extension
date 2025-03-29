@@ -424,41 +424,41 @@ namespace duckdb
     {
       return;
     }
-    auto &data = data_p.bind_data->CastNoConst<ArrowScanFunctionData>();
     auto &state = data_p.local_state->Cast<ArrowScanLocalState>();
     auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
-    auto &airport_bind_data = data_p.bind_data->Cast<AirportTakeFlightBindData>();
+    auto &airport_bind_data = data_p.bind_data->CastNoConst<AirportTakeFlightBindData>();
 
     //! Out of tuples in this chunk
     if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length)
     {
       if (!ArrowTableFunction::ArrowScanParallelStateNext(
               context,
-              data_p.bind_data.get(),
+              &airport_bind_data,
               state,
               global_state))
       {
         return;
       }
     }
-    int64_t output_size =
+    auto output_size =
         MinValue<int64_t>(STANDARD_VECTOR_SIZE,
                           state.chunk->arrow_array.length - state.chunk_offset);
-    data.lines_read += output_size;
+
+    airport_bind_data.lines_read += output_size;
 
     if (global_state.CanRemoveFilterColumns())
     {
       state.all_columns.Reset();
       state.all_columns.SetCardinality(output_size);
-      ArrowTableFunction::ArrowToDuckDB(state, data.arrow_table.GetColumns(), state.all_columns,
-                                        data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
+      ArrowTableFunction::ArrowToDuckDB(state, airport_bind_data.arrow_table.GetColumns(), state.all_columns,
+                                        airport_bind_data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
       output.ReferenceColumns(state.all_columns, global_state.projection_ids);
     }
     else
     {
       output.SetCardinality(output_size);
-      ArrowTableFunction::ArrowToDuckDB(state, data.arrow_table.GetColumns(), output,
-                                        data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
+      ArrowTableFunction::ArrowToDuckDB(state, airport_bind_data.arrow_table.GetColumns(), output,
+                                        airport_bind_data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
     }
 
     output.Verify();

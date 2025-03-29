@@ -197,7 +197,7 @@ namespace duckdb
       // Just fake a single column index.
       vector<column_t> column_ids = {0};
       scan_global_state = make_uniq<AirportArrowScanGlobalState>();
-      scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<ArrowScanFunctionData>(), column_ids, nullptr);
+      scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr);
 
       // There shouldn't be any projection ids.
       vector<idx_t> projection_ids;
