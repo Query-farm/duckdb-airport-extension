@@ -24,23 +24,6 @@ namespace duckdb
   unique_ptr<GlobalTableFunctionState> AirportArrowScanInitGlobal(ClientContext &context,
                                                                   TableFunctionInitInput &input);
 
-  struct AirportTakeFlightParameters
-  {
-    string server_location;
-    string auth_token;
-    string secret_name;
-    // Override the ticket supplied from GetFlightInfo.
-    // this is supplied via a named parameter.
-    string ticket;
-
-    std::unordered_map<string, std::vector<string>> user_supplied_headers;
-  };
-
-  AirportTakeFlightParameters AirportParseTakeFlightParameters(
-      const string &server_location,
-      ClientContext &context,
-      TableFunctionBindInput &input);
-
   unique_ptr<FunctionData> AirportTakeFlightBindWithFlightDescriptor(
       const AirportTakeFlightParameters &take_flight_params,
       const arrow::flight::FlightDescriptor &descriptor,

@@ -766,8 +766,9 @@ namespace duckdb
       tf_params.table_input_schema = serialized_table_in_schema;
     }
 
-    auto params = AirportParseTakeFlightParameters(function_info.function->location,
-                                                   context, input);
+    auto params = AirportTakeFlightParameters(function_info.function->location,
+                                              context,
+                                              input);
 
     return AirportTakeFlightBindWithFlightDescriptor(
         params,
@@ -862,12 +863,11 @@ namespace duckdb
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
 
-    auto auth_token = AirportAuthTokenForLocation(context, bind_data.server_location, "", "");
-
+    auto auth_token = AirportAuthTokenForLocation(context, bind_data.take_flight_params->server_location(), "", "");
     auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, bind_data.server_location);
+    airport_add_standard_headers(call_options, bind_data.take_flight_params->server_location());
     airport_add_authorization_header(call_options, auth_token);
 
     call_options.headers.emplace_back("airport-trace-id", trace_uuid);
@@ -889,10 +889,12 @@ namespace duckdb
       call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
     }
 
+    auto &server_location = bind_data.take_flight_params->server_location();
+
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto exchange_result,
         bind_data.flight_client->DoExchange(call_options, flight_descriptor),
-        bind_data.server_location,
+        server_location,
         flight_descriptor, "");
 
     // We have the serialized schema that we sent the server earlier so deserialize so we can
@@ -907,7 +909,7 @@ namespace duckdb
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto send_schema,
         arrow::ipc::ReadSchema(buffer_reader.get(), &in_memo),
-        bind_data.server_location,
+        server_location,
         flight_descriptor, "ReadSchema");
 
     // Send the input set of parameters to the server.
@@ -917,19 +919,19 @@ namespace duckdb
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         exchange_result.writer->WriteMetadata(parameters_buffer),
-        bind_data.server_location,
+        server_location,
         flight_descriptor,
         "airport_dynamic_table_function: write metadata with parameters");
 
     // Tell the server the schema that we will be using to write data.
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         exchange_result.writer->Begin(send_schema),
-        bind_data.server_location,
+        server_location,
         flight_descriptor,
         "airport_dynamic_table_function: send schema");
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
-        bind_data.server_location,
+        server_location,
         bind_data.scan_data->flight_descriptor(),
         bind_data.scan_data->schema(),
         std::move(exchange_result.reader));
@@ -940,20 +942,20 @@ namespace duckdb
 
     scan_bind_data->scan_data = std::move(scan_data);
     //    scan_bind_data->flight_client = bind_data.flight_client;
-    scan_bind_data->server_location = bind_data.server_location;
+    scan_bind_data->server_location = server_location;
     scan_bind_data->trace_id = trace_uuid;
 
     vector<column_t> column_ids;
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto read_schema,
                                                        scan_bind_data->scan_data->stream()->GetSchema(),
-                                                       bind_data.server_location,
+                                                       server_location,
                                                        flight_descriptor, "");
 
     auto &data = *scan_bind_data;
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         ExportSchema(*read_schema, &data.schema_root.arrow_schema),
-        bind_data.server_location,
+        server_location,
         flight_descriptor,
         "ExportSchema");
 

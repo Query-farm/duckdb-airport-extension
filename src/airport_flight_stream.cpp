@@ -15,6 +15,7 @@
 #include <arrow/buffer.h>
 #include <arrow/util/align_util.h>
 #include "msgpack.hpp"
+#include "airport_secrets.hpp"
 
 /// File copied from
 /// https://github.com/duckdb/duckdb-wasm/blob/0ad10e7db4ef4025f5f4120be37addc4ebe29618/lib/src/arrow_stream_buffer.cc
@@ -221,6 +222,47 @@ namespace duckdb
     } // LCOV_EXCL_STOP
 
     return current_chunk;
+  }
+
+  AirportTakeFlightParameters::AirportTakeFlightParameters(
+      const string &server_location,
+      ClientContext &context,
+      TableFunctionBindInput &input) : server_location_(server_location)
+  {
+    D_ASSERT(!server_location_.empty());
+
+    for (auto &kv : input.named_parameters)
+    {
+      auto loption = StringUtil::Lower(kv.first);
+      if (loption == "auth_token")
+      {
+        auth_token_ = StringValue::Get(kv.second);
+      }
+      else if (loption == "secret")
+      {
+        secret_name_ = StringValue::Get(kv.second);
+      }
+      else if (loption == "ticket")
+      {
+        ticket_ = StringValue::Get(kv.second);
+      }
+      else if (loption == "headers")
+      {
+        // Now we need to parse out the map contents.
+        auto &children = duckdb::MapValue::GetChildren(kv.second);
+
+        for (auto &value_pair : children)
+        {
+          auto &child_struct = duckdb::StructValue::GetChildren(value_pair);
+          auto key = StringValue::Get(child_struct[0]);
+          auto value = StringValue::Get(child_struct[1]);
+
+          user_supplied_headers_[key].push_back(value);
+        }
+      }
+    }
+
+    auth_token_ = AirportAuthTokenForLocation(context, server_location_, secret_name_, auth_token_);
   }
 
 } // namespace duckdb

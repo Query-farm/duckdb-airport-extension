@@ -85,6 +85,54 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(schema_name, action_name, parameters, table_input_schema)
   };
 
+  class AirportTakeFlightParameters
+  {
+  public:
+    AirportTakeFlightParameters(
+        const string &server_location,
+        ClientContext &context,
+        TableFunctionBindInput &input);
+
+    const string &server_location() const
+    {
+      return server_location_;
+    }
+
+    const string &auth_token() const
+    {
+      return auth_token_;
+    }
+
+    const string &secret_name() const
+    {
+      return secret_name_;
+    }
+
+    const string &ticket() const
+    {
+      return ticket_;
+    }
+
+    const std::unordered_map<string, std::vector<string>> &user_supplied_headers() const
+    {
+      return user_supplied_headers_;
+    }
+
+    void add_header(const string &key, const string &value)
+    {
+      user_supplied_headers_[key].push_back({value});
+    }
+
+  private:
+    string server_location_;
+    string auth_token_;
+    string secret_name_;
+    // Override the ticket supplied from GetFlightInfo.
+    // this is supplied via a named parameter.
+    string ticket_;
+    std::unordered_map<string, std::vector<string>> user_supplied_headers_;
+  };
+
   struct AirportTakeFlightBindData : public ArrowScanFunctionData
   {
   public:
@@ -92,17 +140,18 @@ namespace duckdb
     std::unique_ptr<AirportTakeFlightScanData> scan_data = nullptr;
     std::shared_ptr<arrow::flight::FlightClient> flight_client = nullptr;
 
+    std::unique_ptr<AirportTakeFlightParameters> take_flight_params = nullptr;
+
     // This is the location of the flight server.
-    string server_location;
+    // string server_location;
 
     // This is the auth token.
-    string auth_token;
+    // string auth_token;
 
-    unordered_map<string, std::vector<string>> user_supplied_headers;
-
-    // This is the token to use for the flight as supplied by the user.
-    // if its empty use the token from the server.
-    string ticket;
+    // unordered_map<string, std::vector<string>> user_supplied_headers;
+    //  This is the token to use for the flight as supplied by the user.
+    //  if its empty use the token from the server.
+    // string ticket;
 
     string json_filters;
 
