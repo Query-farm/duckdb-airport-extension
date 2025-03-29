@@ -36,9 +36,15 @@ namespace duckdb
     }
 
     // The identifier returned from the Arrow flight server.
-    std::optional<std::string> identifier;
+    const std::optional<std::string> &identifier() const
+    {
+      return identifier_;
+    }
 
   private:
+    // The identifier returned from the Arrow flight server.
+    std::optional<std::string> identifier_;
+
     std::optional<std::string> GetTransactionIdentifier();
 
     AirportTransactionState transaction_state;
@@ -47,7 +53,7 @@ namespace duckdb
     // The name of the catalog where this transaction is running.
     std::string catalog_name;
     // Copied from the airport catalog, since it can't keep a reference.
-    shared_ptr<const AirportAttachParameters> attach_parameters;
+    std::shared_ptr<const AirportAttachParameters> attach_parameters;
   };
 
 } // namespace duckdb

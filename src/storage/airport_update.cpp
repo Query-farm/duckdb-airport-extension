@@ -166,7 +166,7 @@ namespace duckdb
                                       return_chunk,
                                       "update",
                                       table_column_names,
-                                      transaction.identifier);
+                                      transaction.identifier());
 
     return std::move(update_global_state);
   }

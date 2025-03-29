@@ -198,7 +198,7 @@ namespace duckdb
                                       return_chunk,
                                       "insert",
                                       returning_column_names,
-                                      transaction.identifier);
+                                      transaction.identifier());
 
     return std::move(insert_global_state);
   }

@@ -190,12 +190,52 @@ namespace duckdb
 
   struct AirportAPISchema
   {
-    string schema_name;
-    string catalog_name;
-    string comment;
-    unordered_map<string, string> tags;
 
-    AirportSerializedContentsWithSHA256Hash source;
+    AirportAPISchema(const string &catalog_name,
+                     const string &schema_name,
+                     const string &comment,
+                     const unordered_map<string, string> &tags,
+                     std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source)
+        : catalog_name_(catalog_name),
+          schema_name_(schema_name),
+          comment_(comment),
+          tags_(tags),
+          source_(source)
+    {
+    }
+
+    const string &catalog_name() const
+    {
+      return catalog_name_;
+    }
+
+    const string &schema_name() const
+    {
+      return schema_name_;
+    }
+
+    const string &comment() const
+    {
+      return comment_;
+    }
+
+    const unordered_map<string, string> &tags() const
+    {
+      return tags_;
+    }
+
+    std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source() const
+    {
+      return source_;
+    }
+
+  private:
+    string catalog_name_;
+    string schema_name_;
+    string comment_;
+    unordered_map<string, string> tags_;
+
+    std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source_;
   };
 
   struct AirportSchemaCollection
@@ -223,10 +263,10 @@ namespace duckdb
     static unique_ptr<AirportSchemaContents> GetSchemaItems(CURL *curl,
                                                             const string &catalog,
                                                             const string &schema,
-                                                            const AirportSerializedContentsWithSHA256Hash &source,
+                                                            std::shared_ptr<const AirportSerializedContentsWithSHA256Hash> source,
                                                             const string &cache_base_dir,
-                                                            shared_ptr<AirportAttachParameters> credentials);
-    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, shared_ptr<AirportAttachParameters> credentials);
+                                                            std::shared_ptr<AirportAttachParameters> credentials);
+    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, std::shared_ptr<AirportAttachParameters> credentials);
 
     static void PopulateCatalogSchemaCacheFromURLorContent(CURL *curl,
                                                            const AirportSchemaCollection &collection,

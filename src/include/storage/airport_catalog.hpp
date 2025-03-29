@@ -108,7 +108,7 @@ namespace duckdb
       return internal_name_;
     }
 
-    const shared_ptr<AirportAttachParameters> &attach_parameters() const
+    const std::shared_ptr<AirportAttachParameters> &attach_parameters() const
     {
       return attach_parameters_;
     }
@@ -124,7 +124,7 @@ namespace duckdb
   private:
     std::shared_ptr<arrow::flight::FlightClient> flight_client_;
     AccessMode access_mode_;
-    shared_ptr<AirportAttachParameters> attach_parameters_;
+    std::shared_ptr<AirportAttachParameters> attach_parameters_;
     string internal_name_;
     AirportSchemaSet schemas;
     string default_schema;

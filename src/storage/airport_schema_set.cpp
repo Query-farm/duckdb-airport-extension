@@ -103,25 +103,25 @@ namespace duckdb
     {
       CreateSchemaInfo info;
 
-      if (schema.schema_name.empty())
+      if (schema.schema_name().empty())
       {
         throw InvalidInputException("Airport: catalog '%s' contained a schema with an empty name");
       }
-      if (!(seen_schema_names.find(schema.schema_name) == seen_schema_names.end()))
+      if (!(seen_schema_names.find(schema.schema_name()) == seen_schema_names.end()))
       {
-        throw InvalidInputException("Airport: catalog '%s' contained two or more schemas named %s", catalog_name, schema.schema_name.c_str());
+        throw InvalidInputException("Airport: catalog '%s' contained two or more schemas named %s", catalog_name, schema.schema_name().c_str());
       }
 
-      seen_schema_names.insert(schema.schema_name);
+      seen_schema_names.insert(schema.schema_name());
 
-      info.schema = schema.schema_name;
-      info.internal = IsInternalTable(schema.catalog_name, schema.schema_name);
+      info.schema = schema.schema_name();
+      info.internal = IsInternalTable(schema.catalog_name(), schema.schema_name());
       auto schema_entry = make_uniq<AirportSchemaEntry>(catalog, info, connection_pool, cache_path);
       schema_entry->schema_data = make_uniq<AirportAPISchema>(schema);
 
       // Since these are DuckDB attributes, we need to copy them manually.
-      schema_entry->comment = schema.comment;
-      schema_entry->tags = schema.tags;
+      schema_entry->comment = schema.comment();
+      schema_entry->tags = schema.tags();
       // printf("Creating schema %s\n", schema.schema_name.c_str());
       CreateEntry(std::move(schema_entry));
     }
@@ -177,9 +177,13 @@ namespace duckdb
     // We aren't interested in anything from this call.
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 
-    auto real_schema = make_uniq<AirportAPISchema>();
-    real_schema->catalog_name = catalog.GetName();
-    real_schema->schema_name = info.schema;
+    unordered_map<string, string> empty;
+    auto real_schema = make_uniq<AirportAPISchema>(
+        catalog.GetName(),
+        info.schema,
+        "",
+        empty,
+        nullptr);
     string cache_path = DuckDBHomeDirectory(context);
 
     auto schema_entry = make_uniq<AirportSchemaEntry>(catalog, info, connection_pool, cache_path);

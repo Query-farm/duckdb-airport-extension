@@ -53,7 +53,7 @@ namespace duckdb
     vector<Value> inputs = {
         //        table_data->server_location(),
         Value::POINTER((uintptr_t)table_data.get()),
-        transaction.identifier.has_value() ? transaction.identifier.value() : ""};
+        transaction.identifier().has_value() ? transaction.identifier().value() : ""};
 
     named_parameter_map_t param_map;
     vector<LogicalType> return_types;

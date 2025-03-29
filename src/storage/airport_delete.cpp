@@ -123,7 +123,7 @@ namespace duckdb
 
     AirportExchangeGetGlobalSinkState(context, table, airport_table, delete_global_state.get(), send_schema, return_chunk, "delete",
                                       returning_column_names,
-                                      transaction.identifier);
+                                      transaction.identifier());
 
     return std::move(delete_global_state);
   }

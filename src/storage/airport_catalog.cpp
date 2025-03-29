@@ -21,7 +21,7 @@ namespace duckdb
 
   AirportCatalog::AirportCatalog(AttachedDatabase &db_p, const string &internal_name, AccessMode access_mode,
                                  AirportAttachParameters attach_params)
-      : Catalog(db_p), access_mode_(access_mode), attach_parameters_(make_shared_ptr<AirportAttachParameters>(std::move(attach_params))),
+      : Catalog(db_p), access_mode_(access_mode), attach_parameters_(std::make_shared<AirportAttachParameters>(std::move(attach_params))),
         internal_name_(internal_name), schemas(*this)
   {
     flight_client_ = AirportAPI::FlightClientForLocation(this->attach_parameters_->location());

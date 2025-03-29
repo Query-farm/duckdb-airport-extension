@@ -67,7 +67,7 @@ namespace duckdb
     transaction_state = AirportTransactionState::TRANSACTION_NOT_YET_STARTED;
     // Get an identifier from the server that will be passed as airport-transaction-id
     // in requests.
-    identifier = GetTransactionIdentifier();
+    identifier_ = GetTransactionIdentifier();
   }
   void AirportTransaction::Commit()
   {
