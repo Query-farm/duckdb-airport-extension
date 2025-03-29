@@ -35,7 +35,7 @@ namespace duckdb
     explicit FlightMetadataRecordBatchReaderAdapter(
         const string &flight_server_location,
         const flight::FlightDescriptor &flight_descriptor,
-        double *progress,
+        atomic<double> *progress,
         string *last_app_metadata,
         std::shared_ptr<arrow::Schema> schema,
         std::shared_ptr<flight::MetadataRecordBatchReader> delegate)
@@ -87,7 +87,7 @@ namespace duckdb
     flight::FlightDescriptor flight_descriptor_;
     std::shared_ptr<arrow::Schema> schema_;
     std::shared_ptr<flight::MetadataRecordBatchReader> delegate_;
-    double *progress_;
+    atomic<double> *progress_;
     string *last_app_metadata_;
   };
 
@@ -95,7 +95,7 @@ namespace duckdb
       std::shared_ptr<flight::MetadataRecordBatchReader> reader,
       const string &flight_server_location,
       const flight::FlightDescriptor &flight_descriptor,
-      double *progress,
+      atomic<double> *progress,
       string *last_app_metadata)
   {
     ARROW_ASSIGN_OR_RAISE(auto schema, reader->GetSchema());

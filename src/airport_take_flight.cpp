@@ -1015,7 +1015,7 @@ namespace duckdb
   static double take_flight_scan_progress(ClientContext &, const FunctionData *data, const GlobalTableFunctionState *global_state)
   {
     auto &bind_data = data->Cast<AirportTakeFlightBindData>();
-    lock_guard<mutex> guard(bind_data.lock);
+    //    lock_guard<mutex> guard(bind_data.lock);
 
     // FIXME: this will have to be adapted for multiple endpoints
     return bind_data.scan_data->progress_ * 100.0;

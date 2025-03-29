@@ -65,7 +65,7 @@ namespace duckdb
       stream_ = stream;
     }
 
-    double progress_;
+    atomic<double> progress_;
     string last_app_metadata_;
 
   private:
@@ -110,8 +110,6 @@ namespace duckdb
     string trace_id;
 
     idx_t rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
-
-    mutable mutex lock;
 
     // Force no-result
     // When issuing updates and deletes on tables that cannot produce row ids
