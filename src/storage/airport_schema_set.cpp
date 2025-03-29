@@ -70,7 +70,7 @@ namespace duckdb
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
     string cache_path = DuckDBHomeDirectory(context);
 
-    auto returned_collection = AirportAPI::GetSchemas(catalog.GetName(), airport_catalog.credentials);
+    auto returned_collection = AirportAPI::GetSchemas(catalog.GetName(), airport_catalog.attach_parameters());
 
     airport_catalog.loaded_catalog_version = returned_collection->version_info;
 
@@ -147,12 +147,12 @@ namespace duckdb
 
     arrow::flight::FlightCallOptions call_options;
 
-    airport_add_standard_headers(call_options, airport_catalog.credentials->location());
-    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token());
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
 
     call_options.headers.emplace_back("airport-action-name", "create_schema");
 
-    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location());
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
     AirportCreateSchemaParameters params;
     params.catalog_name = info.catalog;
@@ -166,7 +166,7 @@ namespace duckdb
     std::stringstream packed_buffer;
     msgpack::pack(packed_buffer, params);
 
-    auto &server_location = airport_catalog.credentials->location();
+    auto &server_location = airport_catalog.attach_parameters()->location();
 
     arrow::flight::Action action{"create_schema",
                                  arrow::Buffer::FromString(packed_buffer.str())};

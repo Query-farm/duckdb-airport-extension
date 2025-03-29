@@ -115,7 +115,7 @@ namespace duckdb
         schema.name,
         schema.schema_data->source,
         cache_directory,
-        airport_catalog.credentials);
+        airport_catalog.attach_parameters());
     connection_pool.release(curl);
 
     for (auto &table : contents->tables)
@@ -128,9 +128,12 @@ namespace duckdb
 
       std::shared_ptr<arrow::Schema> info_schema = table.schema();
 
+      auto &server_location = airport_catalog.attach_parameters()->location();
+
       ArrowSchema arrow_schema;
 
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials->location(), table.descriptor(), "ExportSchema");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema),
+                                                  server_location, table.descriptor(), "ExportSchema");
 
       vector<string> column_names;
       vector<duckdb::LogicalType> return_types;
@@ -148,7 +151,7 @@ namespace duckdb
           AIRPORT_MSGPACK_UNPACK(
               AirportTableCheckConstraints, table_constraints,
               check_constraints,
-              airport_catalog.credentials->location(),
+              server_location,
               "File to parse msgpack encoded table check constraints.");
 
           for (auto &expression : table_constraints.constraints)
@@ -310,7 +313,7 @@ namespace duckdb
     ArrowSchema schema;
     auto client_properties = context.GetClientProperties();
 
-    auto &server_location = airport_catalog.credentials->location();
+    auto &server_location = airport_catalog.attach_parameters()->location();
 
     ArrowConverter::ToArrowSchema(&schema,
                                   column_types,
@@ -319,24 +322,22 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), server_location, "");
 
-    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = std::make_shared<arrow::KeyValueMetadata>();
-
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("table_name", base.table), airport_catalog.credentials->location, "");
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("schema_name", base.schema), airport_catalog.credentials->location, "");
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("catalog_name", base.catalog), airport_catalog.credentials->location, "");
-
-    real_schema = real_schema->WithMetadata(schema_metadata);
+    //    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = std::make_shared<arrow::KeyValueMetadata>();
+    //    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("table_name", base.table), airport_catalog.attach_parameters()->location, "");
+    //    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("schema_name", base.schema), airport_catalog.attach_parameters()->location, "");
+    //    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("catalog_name", base.catalog), airport_catalog.attach_parameters()->location, "");
+    //    real_schema = real_schema->WithMetadata(schema_metadata);
 
     // Not make the call, need to include the schema name.
 
     arrow::flight::FlightCallOptions call_options;
 
-    airport_add_standard_headers(call_options, airport_catalog.credentials->location());
-    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token());
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
 
     call_options.headers.emplace_back("airport-action-name", "create_table");
 
-    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location());
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
         auto serialized_schema,
@@ -373,7 +374,7 @@ namespace duckdb
 
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, rowid_type);
-    table_entry->table_data = make_uniq<AirportAPITable>(airport_catalog.credentials->location(),
+    table_entry->table_data = make_uniq<AirportAPITable>(server_location,
                                                          flight_info,
                                                          base.catalog,
                                                          base.schema,
@@ -479,7 +480,7 @@ namespace duckdb
         schema.name,
         schema.schema_data->source,
         cache_directory,
-        airport_catalog.credentials);
+        airport_catalog.attach_parameters());
 
     connection_pool.release(curl);
 
@@ -1206,7 +1207,7 @@ namespace duckdb
         schema.name,
         schema.schema_data->source,
         cache_directory,
-        airport_catalog.credentials);
+        airport_catalog.attach_parameters());
 
     connection_pool.release(curl);
 

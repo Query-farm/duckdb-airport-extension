@@ -20,11 +20,11 @@ namespace duckdb
 {
 
   AirportCatalog::AirportCatalog(AttachedDatabase &db_p, const string &internal_name, AccessMode access_mode,
-                                 AirportAttachParameters credentials)
-      : Catalog(db_p), internal_name(internal_name), access_mode(access_mode), credentials(make_shared_ptr<AirportAttachParameters>(std::move(credentials))),
-        schemas(*this)
+                                 AirportAttachParameters attach_params)
+      : Catalog(db_p), access_mode_(access_mode), attach_parameters_(make_shared_ptr<AirportAttachParameters>(std::move(attach_params))),
+        internal_name_(internal_name), schemas(*this)
   {
-    flight_client = AirportAPI::FlightClientForLocation(this->credentials->location());
+    flight_client_ = AirportAPI::FlightClientForLocation(this->attach_parameters_->location());
   }
 
   AirportCatalog::~AirportCatalog() = default;
@@ -41,16 +41,16 @@ namespace duckdb
     }
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, credentials->location());
-    airport_add_authorization_header(call_options, credentials->auth_token());
+    airport_add_standard_headers(call_options, attach_parameters_->location());
+    airport_add_authorization_header(call_options, attach_parameters_->auth_token());
 
     // Might want to cache this though if a server declares the server catalog will not change.
-    arrow::flight::Action action{"get_catalog_version", arrow::Buffer::FromString(internal_name)};
+    arrow::flight::Action action{"get_catalog_version", arrow::Buffer::FromString(internal_name_)};
 
-    auto &server_location = credentials->location();
+    auto &server_location = attach_parameters_->location();
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client->DoAction(call_options, action),
+                                            flight_client_->DoAction(call_options, action),
                                             server_location,
                                             "calling get_catalog_version action");
 
@@ -127,7 +127,7 @@ namespace duckdb
 
   string AirportCatalog::GetDBPath()
   {
-    return internal_name;
+    return internal_name_;
   }
 
   DatabaseSize AirportCatalog::GetDatabaseSize(ClientContext &context)

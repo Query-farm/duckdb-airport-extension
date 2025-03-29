@@ -4,6 +4,9 @@
       "name": "msgpack"
     },
     {
+      "name": "boost-variant"
+    },
+    {
       "name": "curl",
       "features": [
         "http2",

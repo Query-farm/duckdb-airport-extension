@@ -56,10 +56,10 @@ namespace duckdb
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
     arrow::flight::FlightCallOptions call_options;
 
-    airport_add_standard_headers(call_options, airport_catalog.credentials->location());
-    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token());
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
 
-    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location());
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
     // Common parameters
     DropItemActionParameters params;
@@ -90,7 +90,7 @@ namespace duckdb
 
     arrow::flight::Action action{action_type, arrow::Buffer::FromString(packed_buffer.str())};
 
-    auto &server_location = airport_catalog.credentials->location();
+    auto &server_location = airport_catalog.attach_parameters()->location();
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_create_schema");
 

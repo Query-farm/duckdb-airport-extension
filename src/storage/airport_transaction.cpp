@@ -15,10 +15,10 @@ namespace duckdb
 {
 
   AirportTransaction::AirportTransaction(AirportCatalog &airport_catalog, TransactionManager &manager, ClientContext &context)
-      : Transaction(manager, context), access_mode(airport_catalog.access_mode)
+      : Transaction(manager, context), access_mode_(airport_catalog.access_mode())
   {
-    credentials = airport_catalog.credentials;
-    catalog_name = airport_catalog.internal_name;
+    attach_parameters = airport_catalog.attach_parameters();
+    catalog_name = airport_catalog.internal_name();
   }
 
   AirportTransaction::~AirportTransaction() = default;
@@ -31,12 +31,12 @@ namespace duckdb
 
   std::optional<string> AirportTransaction::GetTransactionIdentifier()
   {
-    auto &server_location = credentials->location();
-    auto flight_client = AirportAPI::FlightClientForLocation(credentials->location());
+    auto &server_location = attach_parameters->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(attach_parameters->location());
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, credentials->location());
-    airport_add_authorization_header(call_options, credentials->auth_token());
+    airport_add_standard_headers(call_options, attach_parameters->location());
+    airport_add_authorization_header(call_options, attach_parameters->auth_token());
 
     arrow::flight::Action action{"get_transaction_identifier", arrow::Buffer::FromString(catalog_name)};
 

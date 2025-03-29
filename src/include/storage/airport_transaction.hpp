@@ -32,7 +32,7 @@ namespace duckdb
     static AirportTransaction &Get(ClientContext &context, Catalog &catalog);
     AccessMode GetAccessMode() const
     {
-      return access_mode;
+      return access_mode_;
     }
 
     // The identifier returned from the Arrow flight server.
@@ -42,12 +42,12 @@ namespace duckdb
     std::optional<std::string> GetTransactionIdentifier();
 
     AirportTransactionState transaction_state;
-    AccessMode access_mode;
+    AccessMode access_mode_;
 
     // The name of the catalog where this transaction is running.
     std::string catalog_name;
     // Copied from the airport catalog, since it can't keep a reference.
-    shared_ptr<AirportAttachParameters> credentials;
+    shared_ptr<const AirportAttachParameters> attach_parameters;
   };
 
 } // namespace duckdb

@@ -59,13 +59,8 @@ namespace duckdb
   {
   public:
     explicit AirportCatalog(AttachedDatabase &db_p, const string &internal_name, AccessMode access_mode,
-                            AirportAttachParameters credentials);
+                            AirportAttachParameters attach_params);
     ~AirportCatalog();
-
-    string internal_name;
-    AccessMode access_mode;
-    shared_ptr<AirportAttachParameters> credentials;
-    std::shared_ptr<arrow::flight::FlightClient> flight_client;
 
   public:
     void Initialize(bool load_builtin) override;
@@ -108,10 +103,29 @@ namespace duckdb
     // Track what version of the catalog has been loaded.
     std::optional<AirportGetCatalogVersionResult> loaded_catalog_version;
 
+    const string &internal_name() const
+    {
+      return internal_name_;
+    }
+
+    const shared_ptr<AirportAttachParameters> &attach_parameters() const
+    {
+      return attach_parameters_;
+    }
+
+    const AccessMode &access_mode() const
+    {
+      return access_mode_;
+    }
+
   private:
     void DropSchema(ClientContext &context, DropInfo &info) override;
 
   private:
+    std::shared_ptr<arrow::flight::FlightClient> flight_client_;
+    AccessMode access_mode_;
+    shared_ptr<AirportAttachParameters> attach_parameters_;
+    string internal_name_;
     AirportSchemaSet schemas;
     string default_schema;
   };
