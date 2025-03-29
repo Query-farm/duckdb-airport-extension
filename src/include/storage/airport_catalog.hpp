@@ -11,14 +11,40 @@ namespace duckdb
 
   struct AirportCredentials
   {
-    // The criteria to pass to the flight server when listing flights.
-    string criteria;
+    AirportCredentials(const string &location, const string &auth_token, const string &secret_name, const string &criteria)
+        : location_(location), auth_token_(auth_token), secret_name_(secret_name), criteria_(criteria)
+    {
+    }
+
+    const string &location() const
+    {
+      return location_;
+    }
+
+    const string &auth_token() const
+    {
+      return auth_token_;
+    }
+
+    const string &secret_name() const
+    {
+      return secret_name_;
+    }
+
+    const string &criteria() const
+    {
+      return criteria_;
+    }
+
+  private:
     // The location of the flight server.
-    string location;
+    string location_;
     // The authorization token to use.
-    string auth_token;
+    string auth_token_;
     // The name of the secret to use
-    string secret_name;
+    string secret_name_;
+    // The criteria to pass to the flight server when listing flights.
+    string criteria_;
   };
 
   class AirportClearCacheFunction : public TableFunction

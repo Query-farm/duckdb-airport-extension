@@ -59,7 +59,9 @@ namespace duckdb
                                                     AttachedDatabase &db, const string &name, AttachInfo &info,
                                                     AccessMode access_mode)
     {
-        AirportCredentials credentials;
+        string secret_name;
+        string auth_token;
+        string location;
 
         // check if we have a secret provided
         for (auto &entry : info.options)
@@ -71,15 +73,15 @@ namespace duckdb
             }
             else if (lower_name == "secret")
             {
-                credentials.secret_name = entry.second.ToString();
+                secret_name = entry.second.ToString();
             }
             else if (lower_name == "auth_token")
             {
-                credentials.auth_token = entry.second.ToString();
+                auth_token = entry.second.ToString();
             }
             else if (lower_name == "location")
             {
-                credentials.location = entry.second.ToString();
+                location = entry.second.ToString();
             }
             else
             {
@@ -87,14 +89,14 @@ namespace duckdb
             }
         }
 
-        credentials.auth_token = AirportAuthTokenForLocation(context, credentials.location, credentials.secret_name, credentials.auth_token);
+        auth_token = AirportAuthTokenForLocation(context, location, secret_name, auth_token);
 
-        if (credentials.location.empty())
+        if (location.empty())
         {
             throw BinderException("No location provided for Airport ATTACH.");
         }
 
-        return make_uniq<AirportCatalog>(db, info.path, access_mode, credentials);
+        return make_uniq<AirportCatalog>(db, info.path, access_mode, AirportCredentials(location, auth_token, secret_name, ""));
     }
 
     static unique_ptr<TransactionManager> CreateTransactionManager(StorageExtensionInfo *storage_info, AttachedDatabase &db,

@@ -144,6 +144,8 @@ namespace duckdb
       // Now send a list flights request.
       arrow::flight::FlightCallOptions call_options;
       airport_add_standard_headers(call_options, bind_data.server_location);
+
+      // FIXME: this will fail with large filter sizes, so its best not to pass it here.
       call_options.headers.emplace_back("airport-duckdb-json-filters", bind_data.json_filters);
 
       airport_add_authorization_header(call_options, bind_data.auth_token);

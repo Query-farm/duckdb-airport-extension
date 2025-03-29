@@ -24,7 +24,7 @@ namespace duckdb
       : Catalog(db_p), internal_name(internal_name), access_mode(access_mode), credentials(make_shared_ptr<AirportCredentials>(std::move(credentials))),
         schemas(*this)
   {
-    flight_client = AirportAPI::FlightClientForLocation(this->credentials->location);
+    flight_client = AirportAPI::FlightClientForLocation(this->credentials->location());
   }
 
   AirportCatalog::~AirportCatalog() = default;
@@ -41,26 +41,28 @@ namespace duckdb
     }
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, credentials->location);
-    airport_add_authorization_header(call_options, credentials->auth_token);
+    airport_add_standard_headers(call_options, credentials->location());
+    airport_add_authorization_header(call_options, credentials->auth_token());
 
     // Might want to cache this though if a server declares the server catalog will not change.
     arrow::flight::Action action{"get_catalog_version", arrow::Buffer::FromString(internal_name)};
 
+    auto &server_location = credentials->location();
+
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),
-                                            credentials->location,
+                                            server_location,
                                             "calling get_catalog_version action");
 
     // The only item returned is a serialized flight info.
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_catalog_version_buffer,
                                             action_results->Next(),
-                                            credentials->location,
+                                            server_location,
                                             "reading get_catalog_version action result");
 
     AIRPORT_MSGPACK_UNPACK(AirportGetCatalogVersionResult, result,
                            (*serialized_catalog_version_buffer->body),
-                           credentials->location,
+                           server_location,
                            "File to parse msgpack encoded get_catalog_version response");
 
     loaded_catalog_version = result;

@@ -31,32 +31,33 @@ namespace duckdb
 
   std::optional<string> AirportTransaction::GetTransactionIdentifier()
   {
-    auto flight_client = AirportAPI::FlightClientForLocation(credentials->location);
+    auto &server_location = credentials->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(credentials->location());
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, credentials->location);
-    airport_add_authorization_header(call_options, credentials->auth_token);
+    airport_add_standard_headers(call_options, credentials->location());
+    airport_add_authorization_header(call_options, credentials->auth_token());
 
     arrow::flight::Action action{"get_transaction_identifier", arrow::Buffer::FromString(catalog_name)};
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),
-                                            credentials->location,
+                                            server_location,
                                             "calling get_transaction_identifier action");
 
     // The only item returned is a serialized flight info.
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto result_buffer,
                                             action_results->Next(),
-                                            credentials->location,
+                                            server_location,
                                             "reading get_transaction_identifier action result");
 
     AIRPORT_MSGPACK_UNPACK(
         GetTransactionIdentifierResult, result,
         (*(result_buffer->body)),
-        credentials->location,
+        server_location,
         "File to parse msgpack encoded get_transaction_identifier response");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), credentials->location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 
     return result.identifier;
   }

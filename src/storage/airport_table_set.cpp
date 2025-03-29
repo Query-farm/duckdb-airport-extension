@@ -130,7 +130,7 @@ namespace duckdb
 
       ArrowSchema arrow_schema;
 
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials->location, table.descriptor(), "ExportSchema");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema), airport_catalog.credentials->location(), table.descriptor(), "ExportSchema");
 
       vector<string> column_names;
       vector<duckdb::LogicalType> return_types;
@@ -148,7 +148,7 @@ namespace duckdb
           AIRPORT_MSGPACK_UNPACK(
               AirportTableCheckConstraints, table_constraints,
               check_constraints,
-              airport_catalog.credentials->location,
+              airport_catalog.credentials->location(),
               "File to parse msgpack encoded table check constraints.");
 
           for (auto &expression : table_constraints.constraints)
@@ -310,12 +310,14 @@ namespace duckdb
     ArrowSchema schema;
     auto client_properties = context.GetClientProperties();
 
+    auto &server_location = airport_catalog.credentials->location();
+
     ArrowConverter::ToArrowSchema(&schema,
                                   column_types,
                                   column_names,
                                   client_properties);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), airport_catalog.credentials->location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), server_location, "");
 
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = std::make_shared<arrow::KeyValueMetadata>();
 
@@ -329,25 +331,25 @@ namespace duckdb
 
     arrow::flight::FlightCallOptions call_options;
 
-    airport_add_standard_headers(call_options, airport_catalog.credentials->location);
-    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token);
+    airport_add_standard_headers(call_options, airport_catalog.credentials->location());
+    airport_add_authorization_header(call_options, airport_catalog.credentials->auth_token());
 
     call_options.headers.emplace_back("airport-action-name", "create_table");
 
-    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location);
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.credentials->location());
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
         auto serialized_schema,
         arrow::ipc::SerializeSchema(*real_schema, arrow::default_memory_pool()),
-        airport_catalog.credentials->location,
+        server_location,
         "");
 
     arrow::flight::Action action{"create_table",
                                  serialized_schema};
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), airport_catalog.credentials->location, "airport_create_table");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_create_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), airport_catalog.credentials->location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
 
     if (flight_info_buffer == nullptr)
     {
@@ -358,20 +360,20 @@ namespace duckdb
 
     // Now how to we deserialize the flight info from that buffer...
     std::shared_ptr<flight::FlightInfo> flight_info;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), airport_catalog.credentials->location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "");
 
     // We aren't interested in anything after the first result.
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), airport_catalog.credentials->location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 
     auto rowid_type = AirportAPI::GetRowIdType(
         context,
         flight_info,
-        airport_catalog.credentials->location,
+        server_location,
         flight_info->descriptor());
 
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, rowid_type);
-    table_entry->table_data = make_uniq<AirportAPITable>(airport_catalog.credentials->location,
+    table_entry->table_data = make_uniq<AirportAPITable>(airport_catalog.credentials->location(),
                                                          flight_info,
                                                          base.catalog,
                                                          base.schema,
