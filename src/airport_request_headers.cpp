@@ -34,4 +34,21 @@ namespace duckdb
     options.headers.emplace_back("authorization", "Bearer " + auth_token);
   }
 
+  void airport_add_normal_headers(arrow::flight::FlightCallOptions &options,
+                                  const AirportTakeFlightParameters &params,
+                                  const string &trace_id)
+  {
+    airport_add_standard_headers(options, params.server_location());
+    airport_add_authorization_header(options, params.auth_token());
+
+    for (const auto &header_pair : params.user_supplied_headers())
+    {
+      for (const auto &header_value : header_pair.second)
+      {
+        options.headers.emplace_back(header_pair.first, header_value);
+      }
+    }
+
+    options.headers.emplace_back("airport-trace-id", trace_id);
+  }
 }

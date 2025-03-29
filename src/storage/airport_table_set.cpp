@@ -870,10 +870,7 @@ namespace duckdb
     auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, bind_data.take_flight_params->server_location());
-    airport_add_authorization_header(call_options, auth_token);
-
-    call_options.headers.emplace_back("airport-trace-id", trace_uuid);
+    airport_add_normal_headers(call_options, *bind_data.take_flight_params, trace_uuid);
 
     call_options.headers.emplace_back("airport-operation", "table_in_out_function");
 

@@ -179,24 +179,13 @@ namespace duckdb
     auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location());
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, take_flight_params.server_location());
-    airport_add_authorization_header(call_options, take_flight_params.auth_token());
-
-    call_options.headers.emplace_back("airport-trace-id", trace_uuid);
+    airport_add_normal_headers(call_options, take_flight_params, trace_uuid);
 
     if (descriptor.type == arrow::flight::FlightDescriptor::PATH)
     {
       auto path_parts = descriptor.path;
       std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
       call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-    }
-
-    for (const auto &header_pair : take_flight_params.user_supplied_headers())
-    {
-      for (const auto &header_value : header_pair.second)
-      {
-        call_options.headers.emplace_back(header_pair.first, header_value);
-      }
     }
 
     int64_t estimated_records = -1;
@@ -571,10 +560,7 @@ namespace duckdb
     // printf("Can produce statistics for this flight\n");
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, data.take_flight_params->server_location());
-    airport_add_authorization_header(call_options, data.take_flight_params->auth_token());
-
-    call_options.headers.emplace_back("airport-trace-id", data.trace_id);
+    airport_add_normal_headers(call_options, *data.take_flight_params, data.trace_id);
 
     std::stringstream packed_buffer;
 
@@ -818,18 +804,19 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(descriptor, parameters)
   };
 
-  static void GetFlightEndpoints(
-      const string &auth_token,
+  static vector<flight::FlightEndpoint> GetFlightEndpoints(
+      const std::unique_ptr<AirportTakeFlightParameters> &take_flight_params,
       const string &trace_id,
       const flight::FlightDescriptor &descriptor,
-      const std::string &server_location,
       std::shared_ptr<flight::FlightClient> flight_client,
       const std::string &json_filters,
-      const vector<idx_t> &column_ids,
-      vector<flight::FlightEndpoint> &endpoints)
+      const vector<idx_t> &column_ids)
   {
+    vector<flight::FlightEndpoint> endpoints;
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, server_location);
+    auto &server_location = take_flight_params->server_location();
+
+    airport_add_normal_headers(call_options, *take_flight_params, trace_id);
 
     // Since the ticket is an opaque set of bytes, its useful to the middle ware
     // sometimes to know what the path of the flight is.
@@ -839,10 +826,6 @@ namespace duckdb
       std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
       call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
     }
-
-    airport_add_authorization_header(call_options, auth_token);
-
-    call_options.headers.emplace_back("airport-trace-id", trace_id);
 
     AirportGetFlightEndpointsRequest endpoints_request;
 
@@ -884,6 +867,7 @@ namespace duckdb
                                               "deserialize flight endpoint");
       endpoints.push_back(deserialized_endpoint);
     }
+    return endpoints;
   }
 
   unique_ptr<GlobalTableFunctionState> AirportArrowScanInitGlobal(ClientContext &context,
@@ -899,14 +883,12 @@ namespace duckdb
     // FIXME: somehow the flight should be marked if it supports predicate pushdown.
     // right now I'm not sure what this is.
     //
-    GetFlightEndpoints(bind_data.take_flight_params->auth_token(),
-                       bind_data.trace_id,
-                       bind_data.scan_data->flight_descriptor(),
-                       bind_data.take_flight_params->server_location(),
-                       bind_data.flight_client,
-                       bind_data.json_filters,
-                       input.column_ids,
-                       result->endpoints);
+    result->endpoints = GetFlightEndpoints(bind_data.take_flight_params,
+                                           bind_data.trace_id,
+                                           bind_data.scan_data->flight_descriptor(),
+                                           bind_data.flight_client,
+                                           bind_data.json_filters,
+                                           input.column_ids);
 
     D_ASSERT(result->endpoints.size() == 1);
 
@@ -929,7 +911,7 @@ namespace duckdb
     }
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, server_location);
+    airport_add_normal_headers(call_options, *bind_data.take_flight_params, bind_data.trace_id);
 
     // Since the ticket is an opaque set of bytes, its useful to the middle ware
     // sometimes to know what the path of the flight is.
@@ -941,24 +923,12 @@ namespace duckdb
       call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
     }
 
-    airport_add_authorization_header(call_options, bind_data.take_flight_params->auth_token());
-
-    call_options.headers.emplace_back("airport-trace-id", bind_data.trace_id);
-
     if (bind_data.skip_producing_result_for_update_or_delete)
     {
       // This is a special case where the result of the scan should be skipped.
       // This is useful when the scan is being used to update or delete rows.
       // For a table that doesn't actually produce row ids, so filtering cannot be applied.
       call_options.headers.emplace_back("airport-skip-producing-results", "1");
-    }
-
-    for (const auto &header_pair : bind_data.take_flight_params->user_supplied_headers())
-    {
-      for (const auto &header_value : header_pair.second)
-      {
-        call_options.headers.emplace_back(header_pair.first, header_value);
-      }
     }
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
