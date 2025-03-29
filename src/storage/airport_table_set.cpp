@@ -82,15 +82,15 @@ namespace duckdb
         });
   }
 
-  AirportTableFunctionSet::AirportTableFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool(connection_pool), cache_directory(cache_directory_)
+  AirportTableFunctionSet::AirportTableFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool_(connection_pool), cache_directory_(cache_directory_)
   {
   }
 
-  AirportScalarFunctionSet::AirportScalarFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool(connection_pool), cache_directory(cache_directory_)
+  AirportScalarFunctionSet::AirportScalarFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool_(connection_pool), cache_directory_(cache_directory_)
   {
   }
 
-  AirportTableSet::AirportTableSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool(connection_pool), cache_directory(cache_directory_)
+  AirportTableSet::AirportTableSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool_(connection_pool), cache_directory_(cache_directory_)
   {
   }
 
@@ -108,15 +108,15 @@ namespace duckdb
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
 
     // TODO: handle out-of-order columns using position property
-    auto curl = connection_pool.acquire();
+    auto curl = connection_pool_.acquire();
     auto contents = AirportAPI::GetSchemaItems(
         curl,
         catalog.GetDBPath(),
         schema.name,
         schema.schema_data->source(),
-        cache_directory,
+        cache_directory_,
         airport_catalog.attach_parameters());
-    connection_pool.release(curl);
+    connection_pool_.release(curl);
 
     for (auto &table : contents->tables)
     {
@@ -473,16 +473,16 @@ namespace duckdb
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
 
     // TODO: handle out-of-order columns using position property
-    auto curl = connection_pool.acquire();
+    auto curl = connection_pool_.acquire();
     auto contents = AirportAPI::GetSchemaItems(
         curl,
         catalog.GetDBPath(),
         schema.name,
         schema.schema_data->source(),
-        cache_directory,
+        cache_directory_,
         airport_catalog.attach_parameters());
 
-    connection_pool.release(curl);
+    connection_pool_.release(curl);
 
     //    printf("AirportScalarFunctionSet loading entries\n");
     //    printf("Total functions: %lu\n", tables_and_functions.second.size());
@@ -1200,16 +1200,16 @@ namespace duckdb
 
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
 
-    auto curl = connection_pool.acquire();
+    auto curl = connection_pool_.acquire();
     auto contents = AirportAPI::GetSchemaItems(
         curl,
         catalog.GetDBPath(),
         schema.name,
         schema.schema_data->source(),
-        cache_directory,
+        cache_directory_,
         airport_catalog.attach_parameters());
 
-    connection_pool.release(curl);
+    connection_pool_.release(curl);
 
     // There can be functions with the same name.
     std::unordered_map<FunctionCatalogSchemaName, std::vector<AirportAPITableFunction>> functions_by_name;

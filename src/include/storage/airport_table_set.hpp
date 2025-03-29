@@ -13,8 +13,8 @@ namespace duckdb
   class AirportTableSet : public AirportInSchemaSet
   {
   private:
-    AirportCurlPool &connection_pool;
-    string cache_directory;
+    AirportCurlPool &connection_pool_;
+    string cache_directory_;
 
   public:
     explicit AirportTableSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory);
@@ -47,8 +47,8 @@ namespace duckdb
     void LoadEntries(ClientContext &context) override;
 
   private:
-    AirportCurlPool &connection_pool;
-    string cache_directory;
+    AirportCurlPool &connection_pool_;
+    string cache_directory_;
 
   public:
     explicit AirportScalarFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory);
@@ -62,8 +62,8 @@ namespace duckdb
     void LoadEntries(ClientContext &context) override;
 
   private:
-    AirportCurlPool &connection_pool;
-    string cache_directory;
+    AirportCurlPool &connection_pool_;
+    string cache_directory_;
 
   public:
     explicit AirportTableFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory);
