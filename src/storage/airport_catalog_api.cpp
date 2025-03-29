@@ -98,7 +98,7 @@ namespace duckdb
     return read_buffer;
   }
 
-  vector<string> AirportAPI::GetCatalogs(const string &catalog, AirportCredentials credentials)
+  vector<string> AirportAPI::GetCatalogs(const string &catalog, AirportAttachParameters credentials)
   {
     throw NotImplementedException("AirportAPI::GetCatalogs");
   }
@@ -585,7 +585,7 @@ namespace duckdb
                              const string &schema,
                              const AirportSerializedContentsWithSHA256Hash &source,
                              const string &cache_base_dir,
-                             shared_ptr<AirportCredentials> credentials)
+                             shared_ptr<AirportAttachParameters> credentials)
   {
     auto contents = make_uniq<AirportSchemaContents>();
 
@@ -715,7 +715,7 @@ namespace duckdb
   }
 
   unique_ptr<AirportSchemaCollection>
-  AirportAPI::GetSchemas(const string &catalog_name, shared_ptr<AirportCredentials> credentials)
+  AirportAPI::GetSchemas(const string &catalog_name, shared_ptr<AirportAttachParameters> credentials)
   {
     auto result = make_uniq<AirportSchemaCollection>();
     arrow::flight::FlightCallOptions call_options;

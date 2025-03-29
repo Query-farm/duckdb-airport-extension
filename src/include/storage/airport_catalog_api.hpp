@@ -9,7 +9,7 @@
 
 namespace duckdb
 {
-  struct AirportCredentials;
+  struct AirportAttachParameters;
 
   struct AirportSerializedCatalogSchemaRequest
   {
@@ -219,14 +219,14 @@ namespace duckdb
   class AirportAPI
   {
   public:
-    static vector<string> GetCatalogs(const string &catalog, AirportCredentials credentials);
+    static vector<string> GetCatalogs(const string &catalog, AirportAttachParameters credentials);
     static unique_ptr<AirportSchemaContents> GetSchemaItems(CURL *curl,
                                                             const string &catalog,
                                                             const string &schema,
                                                             const AirportSerializedContentsWithSHA256Hash &source,
                                                             const string &cache_base_dir,
-                                                            shared_ptr<AirportCredentials> credentials);
-    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, shared_ptr<AirportCredentials> credentials);
+                                                            shared_ptr<AirportAttachParameters> credentials);
+    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, shared_ptr<AirportAttachParameters> credentials);
 
     static void PopulateCatalogSchemaCacheFromURLorContent(CURL *curl,
                                                            const AirportSchemaCollection &collection,

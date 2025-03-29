@@ -47,7 +47,7 @@ namespace duckdb
     // The name of the catalog where this transaction is running.
     std::string catalog_name;
     // Copied from the airport catalog, since it can't keep a reference.
-    shared_ptr<AirportCredentials> credentials;
+    shared_ptr<AirportAttachParameters> credentials;
   };
 
 } // namespace duckdb

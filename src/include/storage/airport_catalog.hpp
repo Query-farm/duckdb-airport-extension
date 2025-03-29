@@ -9,9 +9,9 @@ namespace duckdb
 {
   class AirportSchemaEntry;
 
-  struct AirportCredentials
+  struct AirportAttachParameters
   {
-    AirportCredentials(const string &location, const string &auth_token, const string &secret_name, const string &criteria)
+    AirportAttachParameters(const string &location, const string &auth_token, const string &secret_name, const string &criteria)
         : location_(location), auth_token_(auth_token), secret_name_(secret_name), criteria_(criteria)
     {
     }
@@ -59,12 +59,12 @@ namespace duckdb
   {
   public:
     explicit AirportCatalog(AttachedDatabase &db_p, const string &internal_name, AccessMode access_mode,
-                            AirportCredentials credentials);
+                            AirportAttachParameters credentials);
     ~AirportCatalog();
 
     string internal_name;
     AccessMode access_mode;
-    shared_ptr<AirportCredentials> credentials;
+    shared_ptr<AirportAttachParameters> credentials;
     std::shared_ptr<arrow::flight::FlightClient> flight_client;
 
   public:
