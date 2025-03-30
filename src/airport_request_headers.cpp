@@ -1,6 +1,7 @@
 #include "airport_request_headers.hpp"
 #include <string.h>
 #include "duckdb/common/types/uuid.hpp"
+#include <numeric>
 
 // Indicate the version of the caller.
 #define AIRPORT_USER_AGENT "airport/20240820-02"
@@ -40,9 +41,34 @@ namespace duckdb
     options.headers.emplace_back("authorization", "Bearer " + auth_token);
   }
 
+  static std::string join_vector_of_strings(const std::vector<std::string> &vec, const char joiner)
+  {
+    if (vec.empty())
+      return "";
+
+    return std::accumulate(
+        std::next(vec.begin()), vec.end(), vec.front(),
+        [joiner](const std::string &a, const std::string &b)
+        {
+          return a + joiner + b;
+        });
+  }
+
+  void airport_add_flight_path_header(arrow::flight::FlightCallOptions &options,
+                                      const arrow::flight::FlightDescriptor &descriptor)
+  {
+    if (descriptor.type == arrow::flight::FlightDescriptor::PATH)
+    {
+      auto path_parts = descriptor.path;
+      std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
+      options.headers.emplace_back("airport-flight-path", joined_path_parts);
+    }
+  }
+
   void airport_add_normal_headers(arrow::flight::FlightCallOptions &options,
                                   const AirportTakeFlightParameters &params,
-                                  const string &trace_id)
+                                  const string &trace_id,
+                                  std::optional<arrow::flight::FlightDescriptor> descriptor)
   {
     airport_add_standard_headers(options, params.server_location());
     airport_add_authorization_header(options, params.auth_token());
@@ -56,5 +82,11 @@ namespace duckdb
     }
 
     options.headers.emplace_back("airport-trace-id", trace_id);
+
+    if (descriptor.has_value())
+    {
+      auto &flight_descriptor = descriptor.value();
+      airport_add_flight_path_header(options, flight_descriptor);
+    }
   }
 }

@@ -867,9 +867,12 @@ namespace duckdb
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
 
     auto trace_uuid = airport_trace_id();
+    auto &flight_descriptor = bind_data.scan_data->flight_descriptor();
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, *bind_data.take_flight_params, trace_uuid);
+    airport_add_normal_headers(call_options,
+                               *bind_data.take_flight_params, trace_uuid,
+                               flight_descriptor);
 
     auto auth_token = AirportAuthTokenForLocation(context, bind_data.take_flight_params->server_location(), "", "");
 
@@ -880,15 +883,6 @@ namespace duckdb
 
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", "1");
-
-    auto &flight_descriptor = bind_data.scan_data->flight_descriptor();
-
-    if (flight_descriptor.type == arrow::flight::FlightDescriptor::PATH)
-    {
-      auto path_parts = flight_descriptor.path;
-      std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
-      call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-    }
 
     auto &server_location = bind_data.take_flight_params->server_location();
 

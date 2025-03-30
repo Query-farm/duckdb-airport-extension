@@ -53,7 +53,6 @@ namespace duckdb
       auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
       arrow::flight::FlightCallOptions call_options;
-      airport_add_standard_headers(call_options, server_location);
 
       // Lookup the auth token from the secret storage.
 
@@ -63,7 +62,7 @@ namespace duckdb
       // FIXME: there may need to be a way for the user to supply the auth token
       // but since scalar functions are defined by the server, just assume the user
       // has the token persisted in their secret store.
-
+      airport_add_standard_headers(call_options, server_location);
       airport_add_authorization_header(call_options, auth_token);
 
       call_options.headers.emplace_back("airport-trace-id", trace_id);
@@ -74,12 +73,7 @@ namespace duckdb
       // Indicate if the caller is interested in data being returned.
       call_options.headers.emplace_back("return-chunks", "1");
 
-      if (descriptor_.type == arrow::flight::FlightDescriptor::PATH)
-      {
-        auto path_parts = descriptor_.path;
-        std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
-        call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-      }
+      airport_add_flight_path_header(call_options, descriptor_);
 
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
           auto exchange_result,

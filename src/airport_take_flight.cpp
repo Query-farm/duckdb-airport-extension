@@ -26,19 +26,6 @@
 namespace duckdb
 {
 
-  static std::string join_vector_of_strings(const std::vector<std::string> &vec, const char joiner)
-  {
-    if (vec.empty())
-      return "";
-
-    return std::accumulate(
-        std::next(vec.begin()), vec.end(), vec.front(),
-        [joiner](const std::string &a, const std::string &b)
-        {
-          return a + joiner + b;
-        });
-  }
-
   template <typename T>
   static std::vector<std::string> convert_to_strings(const std::vector<T> &vec)
   {
@@ -168,7 +155,7 @@ namespace duckdb
       std::shared_ptr<const AirportGetFlightInfoTableFunctionParameters> table_function_parameters)
   {
     // Create a UID for tracing.
-    const auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
+    const auto trace_uuid = airport_trace_id();
 
     // The main thing that needs to be answered in this function
     // are the names and return types and establishing the bind data.
@@ -179,14 +166,8 @@ namespace duckdb
     auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location());
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, take_flight_params, trace_uuid);
-
-    if (descriptor.type == arrow::flight::FlightDescriptor::PATH)
-    {
-      auto path_parts = descriptor.path;
-      std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
-      call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-    }
+    airport_add_normal_headers(call_options, take_flight_params, trace_uuid,
+                               descriptor);
 
     int64_t estimated_records = -1;
 
@@ -816,16 +797,8 @@ namespace duckdb
     arrow::flight::FlightCallOptions call_options;
     auto &server_location = take_flight_params->server_location();
 
-    airport_add_normal_headers(call_options, *take_flight_params, trace_id);
-
-    // Since the ticket is an opaque set of bytes, its useful to the middle ware
-    // sometimes to know what the path of the flight is.
-    if (descriptor.type == arrow::flight::FlightDescriptor::PATH)
-    {
-      auto path_parts = descriptor.path;
-      std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
-      call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-    }
+    airport_add_normal_headers(call_options, *take_flight_params, trace_id,
+                               descriptor);
 
     AirportGetFlightEndpointsRequest endpoints_request;
 
@@ -910,18 +883,11 @@ namespace duckdb
       server_location = bind_data.take_flight_params->server_location();
     }
 
-    arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, *bind_data.take_flight_params, bind_data.trace_id);
+    auto &descriptor = bind_data.scan_data->flight_descriptor();
 
-    // Since the ticket is an opaque set of bytes, its useful to the middle ware
-    // sometimes to know what the path of the flight is.
-    auto descriptor = bind_data.scan_data->flight_descriptor();
-    if (descriptor.type == arrow::flight::FlightDescriptor::PATH)
-    {
-      auto path_parts = descriptor.path;
-      std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
-      call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-    }
+    arrow::flight::FlightCallOptions call_options;
+    airport_add_normal_headers(call_options, *bind_data.take_flight_params, bind_data.trace_id,
+                               descriptor);
 
     if (bind_data.skip_producing_result_for_update_or_delete)
     {

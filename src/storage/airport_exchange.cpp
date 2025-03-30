@@ -107,12 +107,7 @@ namespace duckdb
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", return_chunk ? "1" : "0");
 
-    if (global_state->flight_descriptor.type == arrow::flight::FlightDescriptor::PATH)
-    {
-      auto path_parts = global_state->flight_descriptor.path;
-      std::string joined_path_parts = join_vector_of_strings(path_parts, '/');
-      call_options.headers.emplace_back("airport-flight-path", joined_path_parts);
-    }
+    airport_add_flight_path_header(call_options, global_state->flight_descriptor);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto exchange_result,
