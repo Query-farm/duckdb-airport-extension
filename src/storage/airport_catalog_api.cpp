@@ -672,20 +672,12 @@ namespace duckdb
 
   LogicalType
   AirportAPI::GetRowIdType(ClientContext &context,
-                           std::shared_ptr<arrow::flight::FlightInfo> flight_info,
+                           std::shared_ptr<arrow::Schema> schema,
                            const string &location,
                            const arrow::flight::FlightDescriptor &descriptor)
   {
-    std::shared_ptr<arrow::Schema> info_schema;
-    arrow::ipc::DictionaryMemo dictionary_memo;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
-                                                       flight_info->GetSchema(&dictionary_memo),
-                                                       location,
-                                                       descriptor,
-                                                       "");
-
     ArrowSchemaWrapper schema_root;
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema,
+    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*schema,
                                                              &schema_root.arrow_schema),
                                                 location,
                                                 descriptor,

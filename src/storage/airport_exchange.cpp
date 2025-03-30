@@ -38,18 +38,6 @@
 
 namespace duckdb
 {
-  static std::string join_vector_of_strings(const std::vector<std::string> &vec, const char joiner)
-  {
-    if (vec.empty())
-      return "";
-
-    return std::accumulate(
-        std::next(vec.begin()), vec.end(), vec.front(),
-        [joiner](const std::string &a, const std::string &b)
-        {
-          return a + joiner + b;
-        });
-  }
 
   static int findIndex(const std::vector<std::string> &vec, const std::string &target)
   {
@@ -93,8 +81,7 @@ namespace duckdb
     arrow::flight::FlightCallOptions call_options;
     airport_add_standard_headers(call_options, airport_table.table_data->server_location());
     airport_add_authorization_header(call_options, auth_token);
-
-    call_options.headers.emplace_back("airport-trace-id", trace_uuid);
+    airport_add_trace_id_header(call_options, trace_uuid);
 
     // Indicate that we are doing a delete.
     call_options.headers.emplace_back("airport-operation", exchange_operation);

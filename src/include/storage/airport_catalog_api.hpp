@@ -277,7 +277,7 @@ namespace duckdb
 
     // The the rowid column type, LogicalType::INVALID if none is present.
     static LogicalType GetRowIdType(ClientContext &context,
-                                    std::shared_ptr<arrow::flight::FlightInfo> flight_info,
+                                    std::shared_ptr<arrow::Schema> schema,
                                     const string &location,
                                     const arrow::flight::FlightDescriptor &descriptor);
   };
