@@ -114,56 +114,25 @@ namespace duckdb
         action_name, description)
   };
 
-  struct AirportAPITable
+  struct AirportAPIObjectBase
   {
 
-    AirportAPITable(
-        const std::string &server_location,
+  public:
+    AirportAPIObjectBase(
         arrow::flight::FlightDescriptor descriptor,
         std::shared_ptr<arrow::Schema> schema,
+        const std::string &server_location,
         const std::string &catalog,
         const std::string &schema_name,
-        const std::string &tableName,
-        const std::string &tableComment)
+        const std::string &name,
+        const std::string &comment)
         : descriptor_(descriptor),
           schema_(schema),
           server_location_(server_location),
           catalog_name_(catalog),
           schema_name_(schema_name),
-          name_(tableName),
-          comment_(tableComment)
-    {
-    }
-
-    AirportAPITable(
-        const std::string &server_location,
-        const arrow::flight::FlightInfo &flight_info,
-        const std::string &catalog,
-        const std::string &schema_name,
-        const std::string &tableName,
-        const std::string &tableComment)
-        : AirportAPITable(
-              server_location,
-              flight_info.descriptor(),
-              GetSchema(server_location, flight_info),
-              catalog,
-              schema_name,
-              tableName,
-              tableComment)
-    {
-    }
-
-    AirportAPITable(
-        const std::string &server_location,
-        const arrow::flight::FlightInfo &flight_info,
-        std::unique_ptr<AirportSerializedFlightAppMetadata> &parsed_app_metadata)
-        : AirportAPITable(
-              server_location,
-              flight_info,
-              parsed_app_metadata->catalog,
-              parsed_app_metadata->schema,
-              parsed_app_metadata->name,
-              parsed_app_metadata->comment)
+          name_(name),
+          comment_(comment)
     {
     }
 
@@ -202,7 +171,7 @@ namespace duckdb
       return comment_;
     }
 
-  private:
+  protected:
     static std::shared_ptr<arrow::Schema> GetSchema(
         const std::string &server_location,
         const arrow::flight::FlightInfo &flight_info)
@@ -217,6 +186,7 @@ namespace duckdb
       return schema;
     }
 
+  private:
     arrow::flight::FlightDescriptor descriptor_;
     std::shared_ptr<arrow::Schema> schema_;
 
@@ -227,12 +197,64 @@ namespace duckdb
     string comment_;
   };
 
+  struct AirportAPITable : public AirportAPIObjectBase
+  {
+    AirportAPITable(
+        const std::string &server_location,
+        arrow::flight::FlightDescriptor descriptor,
+        std::shared_ptr<arrow::Schema> schema,
+        const std::string &catalog,
+        const std::string &schema_name,
+        const std::string &tableName,
+        const std::string &tableComment)
+        : AirportAPIObjectBase(
+              descriptor, schema,
+              server_location,
+              catalog,
+              schema_name,
+              tableName,
+              tableComment)
+    {
+    }
+
+    AirportAPITable(
+        const std::string &server_location,
+        const arrow::flight::FlightInfo &flight_info,
+        const std::string &catalog,
+        const std::string &schema_name,
+        const std::string &tableName,
+        const std::string &tableComment)
+        : AirportAPITable(
+              server_location,
+              flight_info.descriptor(),
+              AirportAPIObjectBase::GetSchema(server_location, flight_info),
+              catalog,
+              schema_name,
+              tableName,
+              tableComment)
+    {
+    }
+
+    AirportAPITable(
+        const std::string &server_location,
+        const arrow::flight::FlightInfo &flight_info,
+        std::unique_ptr<AirportSerializedFlightAppMetadata> &parsed_app_metadata)
+        : AirportAPITable(
+              server_location,
+              flight_info,
+              parsed_app_metadata->catalog,
+              parsed_app_metadata->schema,
+              parsed_app_metadata->name,
+              parsed_app_metadata->comment)
+    {
+    }
+  };
+
   struct AirportAPIScalarFunction
   {
     string catalog_name;
     string schema_name;
     string name;
-
     string comment;
     string description;
 
@@ -245,7 +267,6 @@ namespace duckdb
   {
     string catalog_name;
     string schema_name;
-
     // The name of the table function.
     string name;
     string description;
