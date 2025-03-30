@@ -64,8 +64,7 @@ namespace duckdb
       // has the token persisted in their secret store.
       airport_add_standard_headers(call_options, server_location);
       airport_add_authorization_header(call_options, auth_token);
-
-      call_options.headers.emplace_back("airport-trace-id", trace_id);
+      airport_add_trace_id_header(call_options, trace_id);
 
       // Indicate that we are doing a delete.
       call_options.headers.emplace_back("airport-operation", "scalar_function");

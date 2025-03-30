@@ -11,6 +11,8 @@ namespace duckdb
   void airport_add_authorization_header(arrow::flight::FlightCallOptions &options, const std::string &auth_token);
   void airport_add_flight_path_header(arrow::flight::FlightCallOptions &options,
                                       const arrow::flight::FlightDescriptor &descriptor);
+  void airport_add_trace_id_header(arrow::flight::FlightCallOptions &options,
+                                   const string &trace_id);
 
   void airport_add_normal_headers(arrow::flight::FlightCallOptions &options,
                                   const AirportTakeFlightParameters &params,
