@@ -17,18 +17,6 @@
 
 namespace duckdb
 {
-  static std::string join_vector_of_strings(const std::vector<std::string> &vec, const char joiner)
-  {
-    if (vec.empty())
-      return "";
-
-    return std::accumulate(
-        std::next(vec.begin()), vec.end(), vec.front(),
-        [joiner](const std::string &a, const std::string &b)
-        {
-          return a + joiner + b;
-        });
-  }
 
   // So the local state of an airport provided scalar function is going to setup a
   // lot of the functionality necessary.

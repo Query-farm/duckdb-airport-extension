@@ -69,19 +69,6 @@ namespace std
 namespace duckdb
 {
 
-  static std::string join_vector_of_strings(const std::vector<std::string> &vec, const char joiner)
-  {
-    if (vec.empty())
-      return "";
-
-    return std::accumulate(
-        std::next(vec.begin()), vec.end(), vec.front(),
-        [joiner](const std::string &a, const std::string &b)
-        {
-          return a + joiner + b;
-        });
-  }
-
   AirportTableFunctionSet::AirportTableFunctionSet(AirportCurlPool &connection_pool, AirportSchemaEntry &schema, const string &cache_directory_) : AirportInSchemaSet(schema), connection_pool_(connection_pool), cache_directory_(cache_directory_)
   {
   }
@@ -778,7 +765,7 @@ namespace duckdb
         function_info.function->flight_info->descriptor(),
         context,
         input, return_types, names, nullptr,
-        std::make_shared<AirportGetFlightInfoTableFunctionParameters>(tf_params));
+        std::make_shared<const AirportGetFlightInfoTableFunctionParameters>(tf_params));
   }
 
   struct ArrowSchemaTableFunctionTypes
@@ -871,7 +858,8 @@ namespace duckdb
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options,
-                               *bind_data.take_flight_params, trace_uuid,
+                               *bind_data.take_flight_params,
+                               trace_uuid,
                                flight_descriptor);
 
     auto auth_token = AirportAuthTokenForLocation(context, bind_data.take_flight_params->server_location(), "", "");
