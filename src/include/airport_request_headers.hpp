@@ -13,4 +13,8 @@ namespace duckdb
   void airport_add_normal_headers(arrow::flight::FlightCallOptions &options,
                                   const AirportTakeFlightParameters &params,
                                   const std::string &trace_id);
+
+  // Generate a random id that is used for request tracking.
+  string airport_trace_id();
+
 }

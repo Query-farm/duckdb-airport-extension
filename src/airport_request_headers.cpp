@@ -7,6 +7,12 @@
 
 namespace duckdb
 {
+
+  string airport_trace_id()
+  {
+    return UUID::ToString(UUID::GenerateRandomUUID());
+  }
+
   // Generate a random session id for each time that DuckDB starts,
   // this can be useful on the server side for tracking sessions.
   static const std::string airport_session_id = UUID::ToString(UUID::GenerateRandomUUID());

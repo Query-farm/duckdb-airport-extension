@@ -88,7 +88,7 @@ namespace duckdb
 
     auto flight_client = AirportAPI::FlightClientForLocation(airport_table.table_data->server_location());
 
-    auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
+    auto trace_uuid = airport_trace_id();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_standard_headers(call_options, airport_table.table_data->server_location());

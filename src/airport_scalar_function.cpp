@@ -44,6 +44,7 @@ namespace duckdb
                                              std::shared_ptr<flight::FlightInfo> flight_info,
                                              std::shared_ptr<arrow::Schema> flight_send_schema)
     {
+      const auto trace_id = airport_trace_id();
       server_location_ = server_location;
       descriptor_ = flight_info->descriptor();
       send_schema = flight_send_schema;
@@ -65,7 +66,7 @@ namespace duckdb
 
       airport_add_authorization_header(call_options, auth_token);
 
-      call_options.headers.emplace_back("airport-trace-id", UUID::ToString(UUID::GenerateRandomUUID()));
+      call_options.headers.emplace_back("airport-trace-id", trace_id);
 
       // Indicate that we are doing a delete.
       call_options.headers.emplace_back("airport-operation", "scalar_function");

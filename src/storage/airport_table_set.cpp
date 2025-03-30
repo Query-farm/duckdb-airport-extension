@@ -866,11 +866,12 @@ namespace duckdb
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
 
-    auto auth_token = AirportAuthTokenForLocation(context, bind_data.take_flight_params->server_location(), "", "");
-    auto trace_uuid = UUID::ToString(UUID::GenerateRandomUUID());
+    auto trace_uuid = airport_trace_id();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options, *bind_data.take_flight_params, trace_uuid);
+
+    auto auth_token = AirportAuthTokenForLocation(context, bind_data.take_flight_params->server_location(), "", "");
 
     call_options.headers.emplace_back("airport-operation", "table_in_out_function");
 
