@@ -113,7 +113,7 @@ namespace duckdb
       info.table = table.name();
       info.comment = table.comment();
 
-      std::shared_ptr<arrow::Schema> info_schema = table.schema();
+      auto info_schema = table.schema();
 
       auto &server_location = airport_catalog.attach_parameters()->location();
 
@@ -375,7 +375,7 @@ namespace duckdb
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, rowid_type);
     table_entry->table_data = make_uniq<AirportAPITable>(server_location,
-                                                         flight_info,
+                                                         *flight_info,
                                                          base.catalog,
                                                          base.schema,
                                                          base.table,

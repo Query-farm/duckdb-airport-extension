@@ -31,7 +31,7 @@ namespace duckdb
     AirportTakeFlightScanData(
         const string &flight_server_location,
         const flight::FlightDescriptor &flight_descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        std::shared_ptr<const arrow::Schema> schema,
         std::shared_ptr<flight::FlightStreamReader> stream) : progress_(0),
                                                               flight_server_location_(flight_server_location),
                                                               flight_descriptor_(flight_descriptor),
@@ -50,7 +50,7 @@ namespace duckdb
       return flight_descriptor_;
     }
 
-    const std::shared_ptr<arrow::Schema> schema() const
+    const std::shared_ptr<const arrow::Schema> schema() const
     {
       return schema_;
     }
@@ -71,7 +71,7 @@ namespace duckdb
   private:
     string flight_server_location_;
     flight::FlightDescriptor flight_descriptor_;
-    std::shared_ptr<arrow::Schema> schema_;
+    std::shared_ptr<const arrow::Schema> schema_;
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
   };
 

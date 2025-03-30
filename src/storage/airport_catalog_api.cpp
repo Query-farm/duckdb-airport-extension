@@ -436,48 +436,15 @@ namespace duckdb
     return get_result;
   }
 
-  struct SerializedFlightAppMetadata
+  static std::unique_ptr<AirportSerializedFlightAppMetadata> ParseFlightAppMetadata(const string &app_metadata, const string &server_location)
   {
-    // This is the type of item to populate in DuckDB's catalog
-    // it can be "table", "scalar_function", "table_function"
-    string type;
+    AIRPORT_MSGPACK_UNPACK(AirportSerializedFlightAppMetadata,
+                           app_metadata_obj,
+                           app_metadata,
+                           server_location,
+                           "Failed to parse Flight app_metadata");
 
-    // The name of the schema where this item exists.
-    string schema;
-
-    // The name of the catalog or database where this item exists.
-    string catalog;
-
-    // The name of this item.
-    string name;
-
-    // A custom comment for this item.
-    string comment;
-
-    // This is the Arrow serialized schema for the input
-    // to the function, its not set on tables.
-
-    // In the case of scalar function this is the input schema
-    std::optional<string> input_schema;
-
-    // The name of the action passed to the Arrow Flight server
-    std::optional<string> action_name;
-
-    // This is the function description for table or scalar functions.
-    std::optional<string> description;
-
-    MSGPACK_DEFINE_MAP(
-        type, schema,
-        catalog, name,
-        comment, input_schema,
-        action_name, description)
-  };
-
-  static std::unique_ptr<SerializedFlightAppMetadata> ParseFlightAppMetadata(const string &app_metadata, const string &server_location)
-  {
-    AIRPORT_MSGPACK_UNPACK(SerializedFlightAppMetadata, app_metadata_obj, app_metadata, server_location, "Failed to parse Flight app_metadata");
-
-    return std::make_unique<SerializedFlightAppMetadata>(app_metadata_obj);
+    return std::make_unique<AirportSerializedFlightAppMetadata>(app_metadata_obj);
   }
 
   void handle_flight_app_metadata(const string &app_metadata,
@@ -495,14 +462,10 @@ namespace duckdb
 
     if (parsed_app_metadata->type == "table")
     {
-      AirportAPITable table(
+      contents->tables.emplace_back(AirportAPITable(
           location,
-          std::move(flight_info),
-          parsed_app_metadata->catalog,
-          parsed_app_metadata->schema,
-          parsed_app_metadata->name,
-          parsed_app_metadata->comment);
-      contents->tables.emplace_back(table);
+          *flight_info,
+          parsed_app_metadata));
     }
     else if (parsed_app_metadata->type == "table_function")
     {

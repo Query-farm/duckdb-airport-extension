@@ -77,30 +77,94 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(contents, schemas, version_info)
   };
 
+  struct AirportSerializedFlightAppMetadata
+  {
+    // This is the type of item to populate in DuckDB's catalog
+    // it can be "table", "scalar_function", "table_function"
+    string type;
+
+    // The name of the schema where this item exists.
+    string schema;
+
+    // The name of the catalog or database where this item exists.
+    string catalog;
+
+    // The name of this item.
+    string name;
+
+    // A custom comment for this item.
+    string comment;
+
+    // This is the Arrow serialized schema for the input
+    // to the function, its not set on tables.
+
+    // In the case of scalar function this is the input schema
+    std::optional<string> input_schema;
+
+    // The name of the action passed to the Arrow Flight server
+    std::optional<string> action_name;
+
+    // This is the function description for table or scalar functions.
+    std::optional<string> description;
+
+    MSGPACK_DEFINE_MAP(
+        type, schema,
+        catalog, name,
+        comment, input_schema,
+        action_name, description)
+  };
+
   struct AirportAPITable
   {
 
     AirportAPITable(
         const std::string &server_location,
-        std::shared_ptr<arrow::flight::FlightInfo> flightInfo,
+        arrow::flight::FlightDescriptor descriptor,
+        std::shared_ptr<arrow::Schema> schema,
         const std::string &catalog,
-        const std::string &schema,
+        const std::string &schema_name,
         const std::string &tableName,
         const std::string &tableComment)
-        : server_location_(server_location),
+        : descriptor_(descriptor),
+          schema_(schema),
+          server_location_(server_location),
           catalog_name_(catalog),
-          schema_name_(schema),
+          schema_name_(schema_name),
           name_(tableName),
           comment_(tableComment)
     {
-      descriptor_ = flightInfo->descriptor();
+    }
 
-      arrow::ipc::DictionaryMemo dictionary_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(schema_,
-                                                         flightInfo->GetSchema(&dictionary_memo),
-                                                         server_location_,
-                                                         descriptor_,
-                                                         "");
+    AirportAPITable(
+        const std::string &server_location,
+        const arrow::flight::FlightInfo &flight_info,
+        const std::string &catalog,
+        const std::string &schema_name,
+        const std::string &tableName,
+        const std::string &tableComment)
+        : AirportAPITable(
+              server_location,
+              flight_info.descriptor(),
+              GetSchema(server_location, flight_info),
+              catalog,
+              schema_name,
+              tableName,
+              tableComment)
+    {
+    }
+
+    AirportAPITable(
+        const std::string &server_location,
+        const arrow::flight::FlightInfo &flight_info,
+        std::unique_ptr<AirportSerializedFlightAppMetadata> &parsed_app_metadata)
+        : AirportAPITable(
+              server_location,
+              flight_info,
+              parsed_app_metadata->catalog,
+              parsed_app_metadata->schema,
+              parsed_app_metadata->name,
+              parsed_app_metadata->comment)
+    {
     }
 
     const std::string &server_location() const
@@ -113,7 +177,7 @@ namespace duckdb
       return descriptor_;
     }
 
-    const std::shared_ptr<arrow::Schema> schema() const
+    const std::shared_ptr<const arrow::Schema> schema() const
     {
       return schema_;
     }
@@ -139,6 +203,20 @@ namespace duckdb
     }
 
   private:
+    static std::shared_ptr<arrow::Schema> GetSchema(
+        const std::string &server_location,
+        const arrow::flight::FlightInfo &flight_info)
+    {
+      arrow::ipc::DictionaryMemo dictionary_memo;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+          auto schema,
+          flight_info.GetSchema(&dictionary_memo),
+          server_location,
+          flight_info.descriptor(),
+          "GetSchema");
+      return schema;
+    }
+
     arrow::flight::FlightDescriptor descriptor_;
     std::shared_ptr<arrow::Schema> schema_;
 
