@@ -509,11 +509,11 @@ namespace duckdb
         D_ASSERT(output_types.size() == 1);
 
         auto scalar_func = ScalarFunction(input_types, output_types[0],
-                                          AirportScalarFun,
-                                          AirportScalarFunBind,
+                                          AirportScalarFunctionProcessChunk,
+                                          AirportScalarFunctionBind,
                                           nullptr,
                                           nullptr,
-                                          AirportScalarFunInitLocalState,
+                                          AirportScalarFunctionInitLocalState,
                                           LogicalTypeId::INVALID,
                                           duckdb::FunctionStability::VOLATILE,
                                           duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING,
@@ -861,7 +861,7 @@ namespace duckdb
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
 
     auto trace_uuid = airport_trace_id();
-    auto &flight_descriptor = bind_data.scan_data->flight_descriptor();
+    auto &flight_descriptor = bind_data.scan_data->descriptor();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options,
@@ -922,7 +922,7 @@ namespace duckdb
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
         server_location,
-        bind_data.scan_data->flight_descriptor(),
+        bind_data.scan_data->descriptor(),
         bind_data.scan_data->schema(),
         std::move(exchange_result.reader));
 

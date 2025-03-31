@@ -10,11 +10,17 @@
   for (::arrow::Status _st = ::arrow::internal::GenericToStatus((expr)); !_st.ok();)     \
     throw AirportFlightException(location, descriptor, _st, message);
 
+#define AIRPORT_ARROW_ASSERT_OK_CONTAINER(expr, container, message) \
+  AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(expr, container->server_location(), container->descriptor(), message)
+
 #define AIRPORT_ASSERT_OK_LOCATION_DESCRIPTOR(expr, location, descriptor, message) \
   if (!expr)                                                                       \
   {                                                                                \
     throw AirportFlightException(location, descriptor, #expr, message);            \
   }
+
+#define AIRPORT_ASSERT_OK_CONTAINER(expr, container, message) \
+  AIRPORT_ASSERT_OK_LOCATION_DESCRIPTOR(expr, container->server_location(), container->descriptor(), message)
 
 #define AIRPORT_FLIGHT_RETURN_IF_LOCATION_DESCRIPTOR(error_prefix, condition, status, location, descriptor, message, extra_message) \
   do                                                                                                                                \
@@ -46,6 +52,9 @@
 
 #define AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(lhs, rexpr, location, descriptor, message) \
   AIRPORT_FLIGHT_ASSIGN_OR_RAISE_IMPL_LOCATION_DESCRIPTOR(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), lhs, rexpr, location, descriptor, message);
+
+#define AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(lhs, rexpr, container, message) \
+  AIRPORT_FLIGHT_ASSIGN_OR_RAISE_IMPL_LOCATION_DESCRIPTOR(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), lhs, rexpr, container->server_location(), container->descriptor(), message);
 
 #define AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(lhs, rexpr, location, message) \
   AIRPORT_FLIGHT_ASSIGN_OR_RAISE_IMPL_LOCATION(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), lhs, rexpr, location, message);

@@ -172,16 +172,16 @@ namespace duckdb
         FlightMakeRecordBatchReader(
             buffer_data->stream(),
             buffer_data->server_location(),
-            buffer_data->flight_descriptor(),
+            buffer_data->descriptor(),
             &buffer_data->progress_,
             &buffer_data->last_app_metadata_),
         buffer_data->server_location(),
-        buffer_data->flight_descriptor(),
+        buffer_data->descriptor(),
         "");
 
     // Create arrow stream
     //    auto stream_wrapper = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();
-    auto stream_wrapper = duckdb::make_uniq<AirportArrowArrayStreamWrapper>(buffer_data->server_location(), buffer_data->flight_descriptor());
+    auto stream_wrapper = duckdb::make_uniq<AirportArrowArrayStreamWrapper>(buffer_data->server_location(), buffer_data->descriptor());
     stream_wrapper->arrow_array_stream.release = nullptr;
 
     auto maybe_ok = arrow::ExportRecordBatchReader(
@@ -210,7 +210,7 @@ namespace duckdb
     arrow::ipc::DictionaryMemo dictionary_memo;
     const auto actual_reader = reader->get();
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*actual_reader->schema(), &schema.arrow_schema), actual_reader->server_location(), actual_reader->flight_descriptor(), "ExportSchema");
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(ExportSchema(*actual_reader->schema(), &schema.arrow_schema), actual_reader, "ExportSchema");
   }
 
   shared_ptr<ArrowArrayWrapper> AirportArrowArrayStreamWrapper::GetNextChunk()
@@ -218,7 +218,7 @@ namespace duckdb
     auto current_chunk = make_shared_ptr<ArrowArrayWrapper>();
     if (arrow_array_stream.get_next(&arrow_array_stream, &current_chunk->arrow_array))
     { // LCOV_EXCL_START
-      throw AirportFlightException(flight_server_location_, flight_descriptor_, string(GetError()), "");
+      throw AirportFlightException(this->server_location(), this->descriptor(), string(GetError()), "");
     } // LCOV_EXCL_STOP
 
     return current_chunk;

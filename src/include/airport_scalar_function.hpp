@@ -80,9 +80,9 @@ namespace duckdb
     }
   };
 
-  void AirportScalarFun(DataChunk &args, ExpressionState &state, Vector &result);
-  unique_ptr<FunctionLocalState> AirportScalarFunInitLocalState(ExpressionState &state, const BoundFunctionExpression &expr, FunctionData *bind_data);
+  void AirportScalarFunctionProcessChunk(DataChunk &args, ExpressionState &state, Vector &result);
+  unique_ptr<FunctionLocalState> AirportScalarFunctionInitLocalState(ExpressionState &state, const BoundFunctionExpression &expr, FunctionData *bind_data);
 
-  unique_ptr<FunctionData> AirportScalarFunBind(ClientContext &context, ScalarFunction &bound_function,
-                                                vector<unique_ptr<Expression>> &arguments);
+  unique_ptr<FunctionData> AirportScalarFunctionBind(ClientContext &context, ScalarFunction &bound_function,
+                                                     vector<unique_ptr<Expression>> &arguments);
 }

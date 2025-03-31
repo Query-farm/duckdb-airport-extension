@@ -550,7 +550,7 @@ namespace duckdb
     GetFlightColumnStatistics params;
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
         params.flight_descriptor,
-        data.scan_data->flight_descriptor().SerializeToString(),
+        data.scan_data->descriptor().SerializeToString(),
         server_location,
         "take_flight_statistics");
     params.column_name = schema->name;
@@ -858,7 +858,7 @@ namespace duckdb
     //
     result->endpoints = GetFlightEndpoints(bind_data.take_flight_params,
                                            bind_data.trace_id,
-                                           bind_data.scan_data->flight_descriptor(),
+                                           bind_data.scan_data->descriptor(),
                                            bind_data.flight_client,
                                            bind_data.json_filters,
                                            input.column_ids);
@@ -883,7 +883,7 @@ namespace duckdb
       server_location = bind_data.take_flight_params->server_location();
     }
 
-    auto &descriptor = bind_data.scan_data->flight_descriptor();
+    auto &descriptor = bind_data.scan_data->descriptor();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options, *bind_data.take_flight_params, bind_data.trace_id,
@@ -903,7 +903,7 @@ namespace duckdb
             call_options,
             first_endpoint.ticket),
         server_location,
-        bind_data.scan_data->flight_descriptor(),
+        bind_data.scan_data->descriptor(),
         "");
 
     bind_data.scan_data->setStream(std::move(stream));

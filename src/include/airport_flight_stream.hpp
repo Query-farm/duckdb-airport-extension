@@ -16,6 +16,7 @@
 
 #include "duckdb/function/table/arrow.hpp"
 #include "msgpack.hpp"
+#include "airport_location_descriptor.hpp"
 
 namespace flight = arrow::flight;
 
@@ -25,29 +26,17 @@ namespace duckdb
 {
 
   // This is the structure that is passed to the function that can create the stream.
-  struct AirportTakeFlightScanData
+  struct AirportTakeFlightScanData : public AirportLocationDescriptor
   {
   public:
     AirportTakeFlightScanData(
         const string &flight_server_location,
         const flight::FlightDescriptor &flight_descriptor,
         std::shared_ptr<arrow::Schema> schema,
-        std::shared_ptr<flight::FlightStreamReader> stream) : progress_(0),
-                                                              flight_server_location_(flight_server_location),
-                                                              flight_descriptor_(flight_descriptor),
+        std::shared_ptr<flight::FlightStreamReader> stream) : AirportLocationDescriptor(flight_server_location, flight_descriptor),
                                                               schema_(schema),
                                                               stream_(stream)
     {
-    }
-
-    const std::string &server_location() const
-    {
-      return flight_server_location_;
-    }
-
-    const flight::FlightDescriptor &flight_descriptor() const
-    {
-      return flight_descriptor_;
     }
 
     const std::shared_ptr<arrow::Schema> schema() const
@@ -69,8 +58,6 @@ namespace duckdb
     string last_app_metadata_;
 
   private:
-    string flight_server_location_;
-    flight::FlightDescriptor flight_descriptor_;
     std::shared_ptr<arrow::Schema> schema_;
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
   };
@@ -210,16 +197,12 @@ namespace duckdb
     static void GetSchema(uintptr_t buffer_ptr, duckdb::ArrowSchemaWrapper &schema);
   };
 
-  class AirportArrowArrayStreamWrapper : public duckdb::ArrowArrayStreamWrapper
+  class AirportArrowArrayStreamWrapper : public duckdb::ArrowArrayStreamWrapper, public AirportLocationDescriptor
   {
   public:
-    AirportArrowArrayStreamWrapper(const string &flight_server_location, const flight::FlightDescriptor &flight_descriptor) : flight_server_location_(flight_server_location), flight_descriptor_(flight_descriptor) {}
+    AirportArrowArrayStreamWrapper(const string &flight_server_location, const flight::FlightDescriptor &flight_descriptor) : AirportLocationDescriptor(flight_server_location, flight_descriptor) {}
 
     shared_ptr<ArrowArrayWrapper> GetNextChunk();
-
-  private:
-    string flight_server_location_;
-    flight::FlightDescriptor flight_descriptor_;
   };
 
 } // namespace duckdb
