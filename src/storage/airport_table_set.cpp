@@ -492,7 +492,7 @@ namespace duckdb
 
     for (auto &function : contents->scalar_functions)
     {
-      FunctionCatalogSchemaName function_key{function.catalog_name, function.schema_name, function.name};
+      FunctionCatalogSchemaName function_key{function.catalog_name(), function.schema_name(), function.name()};
       functions_by_name[function_key].emplace_back(function);
     }
 
@@ -503,18 +503,9 @@ namespace duckdb
       // FIXME: need a way to specify the function stability.
       for (const auto &function : pair.second)
       {
-        auto input_types = AirportSchemaToLogicalTypes(context, function.input_schema, function.location, function.flight_info->descriptor());
+        auto input_types = AirportSchemaToLogicalTypes(context, function.input_schema(), function.server_location(), function.descriptor());
 
-        arrow::ipc::DictionaryMemo dictionary_memo;
-
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
-            auto output_schema,
-            function.flight_info->GetSchema(&dictionary_memo),
-            function.location,
-            function.flight_info->descriptor(),
-            "GetSchema");
-
-        auto output_types = AirportSchemaToLogicalTypes(context, output_schema, function.location, function.flight_info->descriptor());
+        auto output_types = AirportSchemaToLogicalTypes(context, function.schema(), function.server_location(), function.descriptor());
         D_ASSERT(output_types.size() == 1);
 
         auto scalar_func = ScalarFunction(input_types, output_types[0],
@@ -527,8 +518,11 @@ namespace duckdb
                                           duckdb::FunctionStability::VOLATILE,
                                           duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING,
                                           nullptr);
-        scalar_func.function_info = make_uniq<AirportScalarFunctionInfo>(function.location, function.name, function.flight_info,
-                                                                         function.input_schema);
+        scalar_func.function_info = make_uniq<AirportScalarFunctionInfo>(function.server_location(),
+                                                                         function.name(),
+                                                                         function.descriptor(),
+                                                                         function.schema(),
+                                                                         function.input_schema());
 
         flight_func_set.AddFunction(scalar_func);
       }

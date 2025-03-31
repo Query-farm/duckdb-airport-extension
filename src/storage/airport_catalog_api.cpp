@@ -504,37 +504,10 @@ namespace duckdb
     }
     else if (parsed_app_metadata->type == "scalar_function")
     {
-      AirportAPIScalarFunction function;
-      function.location = location;
-      function.flight_info = std::move(flight_info);
-
-      function.catalog_name = parsed_app_metadata->catalog;
-      function.schema_name = parsed_app_metadata->schema;
-      function.name = parsed_app_metadata->name;
-      function.comment = parsed_app_metadata->comment;
-      function.description = parsed_app_metadata->description.value_or("");
-
-      if (!parsed_app_metadata->input_schema.has_value())
-      {
-        throw IOException("Function metadata does not have an input_schema defined for function " + function.schema_name + "." + function.name);
-      }
-
-      auto serialized_schema = parsed_app_metadata->input_schema.value();
-
-      arrow::io::BufferReader parameter_schema_reader(
-          std::make_shared<arrow::Buffer>(serialized_schema));
-
-      arrow::ipc::DictionaryMemo in_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
-          auto parameter_schema,
-          arrow::ipc::ReadSchema(&parameter_schema_reader, &in_memo),
+      contents->scalar_functions.emplace_back(AirportAPIScalarFunction(
           location,
-          function.flight_info->descriptor(),
-          "Read serialized input schema");
-
-      function.input_schema = parameter_schema;
-
-      contents->scalar_functions.emplace_back(function);
+          *flight_info,
+          parsed_app_metadata));
     }
     else
     {

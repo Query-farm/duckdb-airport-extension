@@ -29,13 +29,13 @@ namespace duckdb
   {
     explicit AirportScalarFunctionLocalState(ClientContext &context,
                                              const string &server_location,
-                                             std::shared_ptr<flight::FlightInfo> flight_info,
-                                             std::shared_ptr<arrow::Schema> flight_send_schema)
+                                             const flight::FlightDescriptor &descriptor,
+                                             std::shared_ptr<arrow::Schema> function_output_schema,
+                                             std::shared_ptr<arrow::Schema> function_input_schema) : descriptor_(descriptor), function_output_schema_(function_output_schema)
     {
       const auto trace_id = airport_trace_id();
       server_location_ = server_location;
-      descriptor_ = flight_info->descriptor();
-      send_schema = flight_send_schema;
+      function_input_schema_ = function_input_schema;
 
       // Create the client
       auto flight_client = AirportAPI::FlightClientForLocation(server_location);
@@ -70,21 +70,15 @@ namespace duckdb
 
       // Tell the server the schema that we will be using to write data.
       AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
-          exchange_result.writer->Begin(send_schema),
+          exchange_result.writer->Begin(function_input_schema_),
           server_location,
           descriptor_,
           "Begin schema");
 
-      std::shared_ptr<arrow::Schema> info_schema;
-      arrow::ipc::DictionaryMemo dictionary_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
-                                                         flight_info->GetSchema(&dictionary_memo),
-                                                         server_location, flight_info->descriptor(), "");
-
       auto scan_data = make_uniq<AirportTakeFlightScanData>(
           server_location,
-          flight_info->descriptor(),
-          info_schema,
+          descriptor_,
+          function_output_schema_,
           std::move(exchange_result.reader));
 
       scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
@@ -101,17 +95,10 @@ namespace duckdb
 
       // Ensure that the schema of the response matches the one that was
       // returned on the flight info object.
-      {
-        arrow::ipc::DictionaryMemo dictionary_memo;
-        std::shared_ptr<arrow::Schema> info_schema;
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema, flight_info->GetSchema(&dictionary_memo), server_location_, descriptor_, "");
-
-        // Make sure that the response equals the expected schema
-        AIRPORT_ASSERT_OK_LOCATION_DESCRIPTOR(info_schema->Equals(*read_schema),
-                                              server_location_,
-                                              descriptor_,
-                                              "Schema equality check");
-      }
+      AIRPORT_ASSERT_OK_LOCATION_DESCRIPTOR(function_output_schema_->Equals(*read_schema),
+                                            server_location_,
+                                            descriptor_,
+                                            "Schema equality check");
 
       // Convert the Arrow schema to the C format schema.
       auto &data = *scan_bind_data;
@@ -197,10 +184,31 @@ namespace duckdb
     }
 
   public:
-    std::shared_ptr<arrow::Schema> send_schema;
-    bool input_schema_includes_any_types_;
-    string server_location_;
-    flight::FlightDescriptor descriptor_;
+    std::shared_ptr<arrow::Schema> function_input_schema() const
+    {
+      return function_input_schema_;
+    }
+
+    std::shared_ptr<arrow::Schema> function_output_schema() const
+    {
+      return function_output_schema_;
+    }
+
+    const flight::FlightDescriptor &descriptor() const
+    {
+      return descriptor_;
+    }
+
+    const std::string server_location() const
+    {
+      return server_location_;
+    }
+
+    const bool &input_schema_includes_any_types() const
+    {
+      return input_schema_includes_any_types_;
+    }
+
     std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data;
     std::unique_ptr<AirportArrowScanGlobalState> scan_global_state;
     std::unique_ptr<ArrowArrayStreamWrapper> reader;
@@ -208,29 +216,39 @@ namespace duckdb
     std::unique_ptr<arrow::flight::FlightStreamWriter> writer;
 
   private:
+    bool input_schema_includes_any_types_;
+    string server_location_;
+    flight::FlightDescriptor descriptor_;
+    std::shared_ptr<arrow::Schema> function_output_schema_;
+    std::shared_ptr<arrow::Schema> function_input_schema_;
     unique_ptr<arrow::flight::FlightClient> flight_client;
   };
 
   struct AirportScalarFunBindData : public FunctionData
   {
   public:
-    explicit AirportScalarFunBindData(std::shared_ptr<arrow::Schema> input_schema_p)
+    explicit AirportScalarFunBindData(std::shared_ptr<arrow::Schema> input_schema) : input_schema_(input_schema)
     {
-      input_schema = input_schema_p;
     }
 
     unique_ptr<FunctionData> Copy() const override
     {
-      return make_uniq<AirportScalarFunBindData>(input_schema);
+      return make_uniq<AirportScalarFunBindData>(input_schema_);
     };
 
     bool Equals(const FunctionData &other_p) const override
     {
       auto &other = other_p.Cast<AirportScalarFunBindData>();
-      return input_schema == other.input_schema;
+      return input_schema_ == other.input_schema();
     }
 
-    std::shared_ptr<arrow::Schema> input_schema;
+    std::shared_ptr<arrow::Schema> input_schema() const
+    {
+      return input_schema_;
+    }
+
+  private:
+    std::shared_ptr<arrow::Schema> input_schema_;
   };
 
   unique_ptr<FunctionData> AirportScalarFunBind(ClientContext &context, ScalarFunction &bound_function,
@@ -255,7 +273,7 @@ namespace duckdb
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         ExportSchema(*info.input_schema(), &schema_root.arrow_schema),
         info.location(),
-        info.flight_info()->descriptor(),
+        info.flight_descriptor(),
         "ExportSchema");
 
     for (idx_t col_idx = 0;
@@ -309,7 +327,7 @@ namespace duckdb
         cpp_schema,
         arrow::ImportSchema(&send_schema),
         info.location(),
-        info.flight_info()->descriptor(),
+        info.flight_descriptor(),
         "ExportSchema");
 
     return make_uniq<AirportScalarFunBindData>(cpp_schema);
@@ -319,8 +337,6 @@ namespace duckdb
   {
     auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<AirportScalarFunctionLocalState>();
     auto &context = state.GetContext();
-
-    D_ASSERT(lstate.send_schema);
 
     // So the send schema can contain ANY fields, if it does, we want to dynamically create the schema from
     // what was supplied.
@@ -334,15 +350,15 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto record_batch,
-        arrow::ImportRecordBatch(&arr, lstate.send_schema),
-        lstate.server_location_,
-        lstate.descriptor_, "");
+        arrow::ImportRecordBatch(&arr, lstate.function_input_schema()),
+        lstate.server_location(),
+        lstate.descriptor(), "");
 
     // Now send that record batch to the remove server.
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         lstate.writer->WriteRecordBatch(*record_batch),
-        lstate.server_location_,
-        lstate.descriptor_, "");
+        lstate.server_location(),
+        lstate.descriptor(), "");
 
     lstate.scan_local_state->Reset();
 
@@ -379,8 +395,9 @@ namespace duckdb
     return make_uniq<AirportScalarFunctionLocalState>(
         state.GetContext(),
         info.location(),
-        info.flight_info(),
+        info.flight_descriptor(),
+        info.output_schema(),
         // Use this schema that should have the proper types for the any columns.
-        data.input_schema);
+        data.input_schema());
   }
 }

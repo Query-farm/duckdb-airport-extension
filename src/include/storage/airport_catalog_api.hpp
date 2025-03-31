@@ -6,6 +6,7 @@
 #include <curl/curl.h>
 #include <msgpack.hpp>
 #include "airport_macros.hpp"
+#include <arrow/io/memory.h>
 
 namespace duckdb
 {
@@ -146,7 +147,7 @@ namespace duckdb
       return descriptor_;
     }
 
-    const std::shared_ptr<const arrow::Schema> schema() const
+    const std::shared_ptr<arrow::Schema> schema() const
     {
       return schema_;
     }
@@ -197,7 +198,7 @@ namespace duckdb
     string comment_;
   };
 
-  struct AirportAPITable : public AirportAPIObjectBase
+  struct AirportAPITable : AirportAPIObjectBase
   {
     AirportAPITable(
         const std::string &server_location,
@@ -208,7 +209,8 @@ namespace duckdb
         const std::string &tableName,
         const std::string &tableComment)
         : AirportAPIObjectBase(
-              descriptor, schema,
+              descriptor,
+              schema,
               server_location,
               catalog,
               schema_name,
@@ -250,17 +252,57 @@ namespace duckdb
     }
   };
 
-  struct AirportAPIScalarFunction
+  struct AirportAPIScalarFunction : AirportAPIObjectBase
   {
-    string catalog_name;
-    string schema_name;
-    string name;
-    string comment;
-    string description;
 
-    string location;
-    std::shared_ptr<arrow::flight::FlightInfo> flight_info;
-    std::shared_ptr<arrow::Schema> input_schema;
+    AirportAPIScalarFunction(
+        const std::string &server_location,
+        const arrow::flight::FlightInfo &flight_info,
+        std::unique_ptr<AirportSerializedFlightAppMetadata> &parsed_app_metadata)
+        : AirportAPIObjectBase(
+              flight_info.descriptor(),
+              AirportAPIObjectBase::GetSchema(server_location, flight_info),
+              server_location,
+              parsed_app_metadata->catalog,
+              parsed_app_metadata->schema,
+              parsed_app_metadata->name,
+              parsed_app_metadata->comment)
+    {
+      description_ = parsed_app_metadata->description.value_or("");
+      if (!parsed_app_metadata->input_schema.has_value())
+      {
+        throw IOException("Function metadata does not have an input_schema defined for function " + parsed_app_metadata->schema + "." + parsed_app_metadata->name);
+      }
+
+      auto serialized_schema = parsed_app_metadata->input_schema.value();
+
+      arrow::io::BufferReader parameter_schema_reader(
+          std::make_shared<arrow::Buffer>(serialized_schema));
+
+      arrow::ipc::DictionaryMemo in_memo;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+          auto parameter_schema,
+          arrow::ipc::ReadSchema(&parameter_schema_reader, &in_memo),
+          server_location,
+          flight_info.descriptor(),
+          "Read serialized input schema");
+
+      input_schema_ = parameter_schema;
+    }
+
+    const string &description() const
+    {
+      return description_;
+    }
+
+    const std::shared_ptr<arrow::Schema> &input_schema() const
+    {
+      return input_schema_;
+    }
+
+  private:
+    string description_;
+    std::shared_ptr<arrow::Schema> input_schema_;
   };
 
   struct AirportAPITableFunction

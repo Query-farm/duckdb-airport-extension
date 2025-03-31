@@ -31,7 +31,7 @@ namespace duckdb
       const TableFunctionBindInput &input,
       vector<LogicalType> &return_types,
       vector<string> &names,
-      std::shared_ptr<const arrow::Schema> schema,
+      std::shared_ptr<arrow::Schema> schema,
       std::shared_ptr<const struct AirportGetFlightInfoTableFunctionParameters> table_function_parameters);
 
 }
