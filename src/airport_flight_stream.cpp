@@ -50,33 +50,40 @@ namespace duckdb
     {
       while (true)
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk next, delegate_->Next(), this, "");
-        if (next.app_metadata)
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk chunk, delegate_->Next(), this, "");
+        if (chunk.app_metadata)
         {
           // Handle app metadata if needed
 
           if (last_app_metadata_)
           {
-            *last_app_metadata_ = std::string((const char *)next.app_metadata->data(), next.app_metadata->size());
+            *last_app_metadata_ = std::string((const char *)chunk.app_metadata->data(), chunk.app_metadata->size());
           }
 
           // This could be changed later on to be more generic.
           // especially since this wrapper will be used by more values.
           if (progress_)
           {
-            AIRPORT_MSGPACK_UNPACK_CONTAINER(AirportScannerProgress, progress_report, (*next.app_metadata), this, "File to parse msgpack encoded object progress message");
+            AIRPORT_MSGPACK_UNPACK_CONTAINER(AirportScannerProgress, progress_report, (*chunk.app_metadata), this, "File to parse msgpack encoded object progress message");
             *progress_ = progress_report.progress; // Update the progress
           }
         }
-        if (!next.data && !next.app_metadata)
+        if (!chunk.data && !chunk.app_metadata)
         {
           // EOS
           *batch = nullptr;
           return arrow::Status::OK();
         }
-        else if (next.data)
+        else if (chunk.data)
         {
-          *batch = std::move(next.data);
+          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+              auto aligned_chunk,
+              arrow::util::EnsureAlignment(chunk.data, 8, arrow::default_memory_pool()),
+              this,
+              "EnsureRecordBatchAlignment");
+
+          *batch = aligned_chunk;
+
           return arrow::Status::OK();
         }
       }
@@ -95,7 +102,11 @@ namespace duckdb
       atomic<double> *progress,
       string *last_app_metadata)
   {
-    ARROW_ASSIGN_OR_RAISE(auto schema, reader->GetSchema());
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+        auto schema,
+        reader->GetSchema(),
+        (&location_descriptor),
+        "Creation of FlightMetadataRecordBatchReaderAdapter");
     return std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
         location_descriptor,
         progress,
@@ -104,53 +115,10 @@ namespace duckdb
         std::move(reader));
   }
 
-  /// Constructor
-  AirportFlightStreamReader::AirportFlightStreamReader(
-      const string &flight_server_location,
-      std::shared_ptr<flight::FlightInfo> flight_info,
-      std::shared_ptr<flight::FlightStreamReader> flight_stream)
-      : flight_server_location_(flight_server_location), flight_info_(flight_info), flight_stream_(flight_stream) {}
-
-  /// Get the schema
-  std::shared_ptr<arrow::Schema> AirportFlightStreamReader::schema() const
-  {
-    std::shared_ptr<arrow::Schema> info_schema;
-    arrow::ipc::DictionaryMemo dictionary_memo;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema, flight_info_->GetSchema(&dictionary_memo), flight_server_location_, flight_info_->descriptor(), "");
-    return info_schema;
-  }
-
-  /// Read the next record batch in the stream. Return null for batch when
-  /// reaching end of stream
-  arrow::Status AirportFlightStreamReader::ReadNext(
-      std::shared_ptr<arrow::RecordBatch> *batch)
-  {
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto chunk, flight_stream_.get()->Next(), flight_server_location_, flight_info_->descriptor(), "");
-    if (!chunk.data)
-    {
-      // End of the stream has been reached.
-      *batch = nullptr;
-      return arrow::Status::OK();
-    }
-
-    // DuckDB expects the RecordBatch to be aligned at a pointer offset
-    // ensure that this happens.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
-        auto aligned_chunk,
-        arrow::util::EnsureAlignment(chunk.data, 8, arrow::default_memory_pool()),
-        flight_server_location_,
-        flight_info_->descriptor(),
-        "EnsureRecordBatchAlignment");
-
-    *batch = aligned_chunk;
-
-    return arrow::Status::OK();
-  }
-
   /// Arrow array stream factory function
   duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
-  AirportFlightStreamReader::CreateStream(uintptr_t buffer_ptr,
-                                          ArrowStreamParameters &parameters)
+  AirportCreateStream(uintptr_t buffer_ptr,
+                      ArrowStreamParameters &parameters)
   {
     assert(buffer_ptr != 0);
 
@@ -191,19 +159,6 @@ namespace duckdb
     }
 
     return std::move(stream_wrapper);
-  }
-
-  void AirportFlightStreamReader::GetSchema(uintptr_t buffer_ptr,
-                                            duckdb::ArrowSchemaWrapper &schema)
-  {
-    assert(buffer_ptr != 0);
-    // Rusty: this cast needs to be checked to make sure its valid.
-    auto reader = reinterpret_cast<std::shared_ptr<AirportTakeFlightScanData> *>(buffer_ptr);
-
-    arrow::ipc::DictionaryMemo dictionary_memo;
-    const auto actual_reader = reader->get();
-
-    AIRPORT_ARROW_ASSERT_OK_CONTAINER(ExportSchema(*actual_reader->schema(), &schema.arrow_schema), actual_reader, "ExportSchema");
   }
 
   shared_ptr<ArrowArrayWrapper> AirportArrowArrayStreamWrapper::GetNextChunk()

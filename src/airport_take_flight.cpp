@@ -253,7 +253,7 @@ namespace duckdb
     // by the C++ Arrow library and the C based Arrow types that DuckDB already knows how to
     // consume.
     auto ret = make_uniq<AirportTakeFlightBindData>(
-        (stream_factory_produce_t)&AirportFlightStreamReader::CreateStream,
+        (stream_factory_produce_t)&AirportCreateStream,
         (uintptr_t)scan_data.get());
 
     ret->estimated_records = estimated_records;

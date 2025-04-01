@@ -79,7 +79,7 @@ namespace duckdb
           std::move(exchange_result.reader));
 
       scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
-          (stream_factory_produce_t)&AirportFlightStreamReader::CreateStream,
+          (stream_factory_produce_t)&AirportCreateStream,
           (uintptr_t)scan_data.get());
 
       scan_bind_data->scan_data = std::move(scan_data);

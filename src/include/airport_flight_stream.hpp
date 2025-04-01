@@ -172,39 +172,8 @@ namespace duckdb
     int64_t estimated_records = -1;
   };
 
-  struct AirportFlightStreamReader : public arrow::RecordBatchReader
-  {
-  protected:
-    /// The buffer
-    string flight_server_location_;
-    std::shared_ptr<flight::FlightInfo> flight_info_;
-    std::shared_ptr<flight::FlightStreamReader> flight_stream_;
-
-  public:
-    /// Constructor
-    AirportFlightStreamReader(
-        const string &flight_server_location,
-        std::shared_ptr<flight::FlightInfo> flight_info,
-        std::shared_ptr<flight::FlightStreamReader> flight_stream);
-
-    /// Destructor
-    ~AirportFlightStreamReader() = default;
-
-    /// Get the schema
-    std::shared_ptr<arrow::Schema> schema() const override;
-
-    /// Read the next record batch in the stream. Return null for batch when
-    /// reaching end of stream
-    arrow::Status ReadNext(std::shared_ptr<arrow::RecordBatch> *batch) override;
-
-    /// Create arrow array stream wrapper
-    static duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
-
-    CreateStream(uintptr_t buffer_ptr, duckdb::ArrowStreamParameters &parameters);
-
-    /// Create arrow array stream wrapper
-    static void GetSchema(uintptr_t buffer_ptr, duckdb::ArrowSchemaWrapper &schema);
-  };
+  duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
+  AirportCreateStream(uintptr_t buffer_ptr, ArrowStreamParameters &parameters);
 
   class AirportArrowArrayStreamWrapper : public duckdb::ArrowArrayStreamWrapper, public AirportLocationDescriptor
   {
