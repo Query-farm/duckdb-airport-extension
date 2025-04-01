@@ -16,6 +16,7 @@
 #include <arrow/util/align_util.h>
 #include "msgpack.hpp"
 #include "airport_secrets.hpp"
+#include "airport_location_descriptor.hpp"
 
 /// File copied from
 /// https://github.com/duckdb/duckdb-wasm/blob/0ad10e7db4ef4025f5f4120be37addc4ebe29618/lib/src/arrow_stream_buffer.cc
@@ -30,18 +31,16 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(progress)
   };
 
-  class FlightMetadataRecordBatchReaderAdapter : public arrow::RecordBatchReader
+  class FlightMetadataRecordBatchReaderAdapter : public arrow::RecordBatchReader, public AirportLocationDescriptor
   {
   public:
     explicit FlightMetadataRecordBatchReaderAdapter(
-        const string &flight_server_location,
-        const flight::FlightDescriptor &flight_descriptor,
+        const AirportLocationDescriptor &location_descriptor,
         atomic<double> *progress,
         string *last_app_metadata,
         std::shared_ptr<arrow::Schema> schema,
         std::shared_ptr<flight::MetadataRecordBatchReader> delegate)
-        : flight_server_location_(flight_server_location),
-          flight_descriptor_(flight_descriptor),
+        : AirportLocationDescriptor(location_descriptor),
           schema_(std::move(schema)),
           delegate_(std::move(delegate)),
           progress_(progress),
@@ -51,7 +50,7 @@ namespace duckdb
     {
       while (true)
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(flight::FlightStreamChunk next, delegate_->Next(), flight_server_location_, flight_descriptor_, "");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk next, delegate_->Next(), this, "");
         if (next.app_metadata)
         {
           // Handle app metadata if needed
@@ -65,7 +64,7 @@ namespace duckdb
           // especially since this wrapper will be used by more values.
           if (progress_)
           {
-            AIRPORT_MSGPACK_UNPACK(AirportScannerProgress, progress_report, (*next.app_metadata), flight_server_location_, "File to parse msgpack encoded object progress message");
+            AIRPORT_MSGPACK_UNPACK_CONTAINER(AirportScannerProgress, progress_report, (*next.app_metadata), this, "File to parse msgpack encoded object progress message");
             *progress_ = progress_report.progress; // Update the progress
           }
         }
@@ -84,8 +83,6 @@ namespace duckdb
     }
 
   private:
-    const string flight_server_location_;
-    flight::FlightDescriptor flight_descriptor_;
     std::shared_ptr<arrow::Schema> schema_;
     std::shared_ptr<flight::MetadataRecordBatchReader> delegate_;
     atomic<double> *progress_;
@@ -94,15 +91,13 @@ namespace duckdb
 
   static arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> FlightMakeRecordBatchReader(
       std::shared_ptr<flight::MetadataRecordBatchReader> reader,
-      const string &flight_server_location,
-      const flight::FlightDescriptor &flight_descriptor,
+      const AirportLocationDescriptor &location_descriptor,
       atomic<double> *progress,
       string *last_app_metadata)
   {
     ARROW_ASSIGN_OR_RAISE(auto schema, reader->GetSchema());
     return std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
-        flight_server_location,
-        flight_descriptor,
+        location_descriptor,
         progress,
         last_app_metadata,
         std::move(schema),
@@ -167,16 +162,14 @@ namespace duckdb
     // If this doesn't work I can re-implement the ArrowArrayStreamWrapper
     // to take a FlightStreamReader instead of a RecordBatchReader.
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto reader,
         FlightMakeRecordBatchReader(
             buffer_data->stream(),
-            buffer_data->server_location(),
-            buffer_data->descriptor(),
+            *buffer_data,
             &buffer_data->progress_,
             &buffer_data->last_app_metadata_),
-        buffer_data->server_location(),
-        buffer_data->descriptor(),
+        buffer_data,
         "");
 
     // Create arrow stream

@@ -29,29 +29,28 @@ namespace duckdb
   struct AirportScalarFunctionLocalState : public FunctionLocalState, public AirportLocationDescriptor
   {
     explicit AirportScalarFunctionLocalState(ClientContext &context,
-                                             const string &server_location,
-                                             const flight::FlightDescriptor &descriptor,
+                                             const AirportLocationDescriptor &location_descriptor,
                                              std::shared_ptr<arrow::Schema> function_output_schema,
-                                             std::shared_ptr<arrow::Schema> function_input_schema) : AirportLocationDescriptor(server_location, descriptor),
-                                                                                                     function_output_schema_(function_output_schema)
+                                             std::shared_ptr<arrow::Schema> function_input_schema) : AirportLocationDescriptor(location_descriptor),
+                                                                                                     function_output_schema_(function_output_schema),
+                                                                                                     function_input_schema_(function_input_schema)
     {
       const auto trace_id = airport_trace_id();
-      function_input_schema_ = function_input_schema;
 
       // Create the client
-      auto flight_client = AirportAPI::FlightClientForLocation(server_location);
+      auto flight_client = AirportAPI::FlightClientForLocation(this->server_location());
 
       arrow::flight::FlightCallOptions call_options;
 
       // Lookup the auth token from the secret storage.
 
       auto auth_token = AirportAuthTokenForLocation(context,
-                                                    server_location,
+                                                    this->server_location(),
                                                     "", "");
       // FIXME: there may need to be a way for the user to supply the auth token
       // but since scalar functions are defined by the server, just assume the user
       // has the token persisted in their secret store.
-      airport_add_standard_headers(call_options, server_location);
+      airport_add_standard_headers(call_options, this->server_location());
       airport_add_authorization_header(call_options, auth_token);
       airport_add_trace_id_header(call_options, trace_id);
 
@@ -75,8 +74,7 @@ namespace duckdb
           "Begin schema");
 
       auto scan_data = make_uniq<AirportTakeFlightScanData>(
-          server_location,
-          this->descriptor(),
+          *this,
           function_output_schema_,
           std::move(exchange_result.reader));
 
@@ -254,10 +252,9 @@ namespace duckdb
 
     ArrowSchemaWrapper schema_root;
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         ExportSchema(*info.input_schema(), &schema_root.arrow_schema),
-        info.location(),
-        info.flight_descriptor(),
+        (&info),
         "ExportSchema");
 
     for (idx_t col_idx = 0;
@@ -307,11 +304,10 @@ namespace duckdb
     std::shared_ptr<arrow::Schema> cpp_schema;
 
     // Export the C based schema to the C++ one.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         cpp_schema,
         arrow::ImportSchema(&send_schema),
-        info.location(),
-        info.flight_descriptor(),
+        (&info),
         "ExportSchema");
 
     return make_uniq<AirportScalarFunctionBindData>(cpp_schema);
@@ -378,8 +374,7 @@ namespace duckdb
 
     return make_uniq<AirportScalarFunctionLocalState>(
         state.GetContext(),
-        info.location(),
-        info.flight_descriptor(),
+        info,
         info.output_schema(),
         // Use this schema that should have the proper types for the any columns.
         data.input_schema());

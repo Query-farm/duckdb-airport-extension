@@ -75,3 +75,6 @@
   {                                                                                           \
     throw AirportFlightException(location, message + string(e.what()));                       \
   }
+
+#define AIRPORT_MSGPACK_UNPACK_CONTAINER(destination_type, destination_name, source, container, message) \
+  AIRPORT_MSGPACK_UNPACK(destination_type, destination_name, source, container->server_location(), message);

@@ -14,12 +14,10 @@
 namespace duckdb
 {
 
-  class AirportScalarFunctionInfo : public ScalarFunctionInfo
+  class AirportScalarFunctionInfo : public ScalarFunctionInfo, public AirportLocationDescriptor
   {
   private:
-    string location_;
     string name_;
-    flight::FlightDescriptor flight_descriptor_;
     std::shared_ptr<arrow::Schema> output_schema_;
     std::shared_ptr<arrow::Schema> input_schema_;
 
@@ -29,7 +27,22 @@ namespace duckdb
                               const flight::FlightDescriptor &flight_descriptor,
                               std::shared_ptr<arrow::Schema> output_schema,
                               std::shared_ptr<arrow::Schema> input_schema)
-        : ScalarFunctionInfo(), location_(location), name_(name), flight_descriptor_(flight_descriptor),
+        : ScalarFunctionInfo(),
+          AirportLocationDescriptor(location, flight_descriptor),
+          name_(name),
+          output_schema_(output_schema),
+          input_schema_(input_schema)
+    {
+    }
+
+    AirportScalarFunctionInfo(
+        const string &name,
+        const AirportLocationDescriptor &location,
+        std::shared_ptr<arrow::Schema> output_schema,
+        std::shared_ptr<arrow::Schema> input_schema)
+        : ScalarFunctionInfo(),
+          AirportLocationDescriptor(location),
+          name_(name),
           output_schema_(output_schema),
           input_schema_(input_schema)
     {
@@ -37,11 +50,6 @@ namespace duckdb
 
     ~AirportScalarFunctionInfo() override
     {
-    }
-
-    const string &location() const
-    {
-      return location_;
     }
 
     const string &name() const
@@ -62,11 +70,6 @@ namespace duckdb
         }
       }
       return false;
-    }
-
-    const flight::FlightDescriptor &flight_descriptor() const
-    {
-      return flight_descriptor_;
     }
 
     std::shared_ptr<arrow::Schema> output_schema() const
