@@ -374,12 +374,17 @@ namespace duckdb
 
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, rowid_type);
+
+    AirportSerializedFlightAppMetadata created_table_metadata;
+    created_table_metadata.catalog = base.catalog;
+    created_table_metadata.schema = base.schema;
+    created_table_metadata.name = base.table;
+    created_table_metadata.comment = "";
+
+    // This uses a special constructor because we don't have the parsing from the Catalog its custom Created
     table_entry->table_data = make_uniq<AirportAPITable>(server_location,
                                                          *flight_info,
-                                                         base.catalog,
-                                                         base.schema,
-                                                         base.table,
-                                                         string(""));
+                                                         created_table_metadata);
 
     return CreateEntry(std::move(table_entry));
   }
@@ -717,11 +722,11 @@ namespace duckdb
   {
     auto function_info = input.info->Cast<AirportDynamicTableFunctionInfo>();
 
-    auto buffer = AirportDynamicSerializeParameters(function_info.function->input_schema,
+    auto buffer = AirportDynamicSerializeParameters(function_info.function->input_schema(),
                                                     context,
                                                     input,
-                                                    function_info.function->location,
-                                                    function_info.function->flight_info->descriptor());
+                                                    function_info.function->location(),
+                                                    function_info.function->descriptor());
 
     // So save the buffer so we can send it to the server to determine
     // the schema of the flight.
@@ -729,8 +734,8 @@ namespace duckdb
     // Then call the DoAction get_dynamic_flight_info with those arguments.
     AirportGetFlightInfoTableFunctionParameters tf_params;
     tf_params.parameters = string((char *)buffer->data(), buffer->size());
-    tf_params.schema_name = function_info.function->schema_name;
-    tf_params.action_name = function_info.function->action_name;
+    tf_params.schema_name = function_info.function->schema_name();
+    tf_params.action_name = function_info.function->action_name();
 
     // If we are doing an table in_out function we need to serialize the schema of the input.
 
@@ -745,17 +750,15 @@ namespace duckdb
                                     input.input_table_names,
                                     client_properties);
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto table_input_schema,
-                                                         arrow::ImportSchema(&input_table_schema),
-                                                         function_info.function->location,
-                                                         function_info.function->flight_info->descriptor(),
-                                                         "");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto table_input_schema,
+                                               arrow::ImportSchema(&input_table_schema),
+                                               function_info.function,
+                                               "");
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
           auto serialized_schema,
           arrow::ipc::SerializeSchema(*table_input_schema, arrow::default_memory_pool()),
-          function_info.function->location,
-          function_info.function->flight_info->descriptor(),
+          function_info.function,
           "");
 
       std::string serialized_table_in_schema(reinterpret_cast<const char *>(serialized_schema->data()), serialized_schema->size());
@@ -763,13 +766,13 @@ namespace duckdb
       tf_params.table_input_schema = serialized_table_in_schema;
     }
 
-    auto params = AirportTakeFlightParameters(function_info.function->location,
+    auto params = AirportTakeFlightParameters(function_info.function->location(),
                                               context,
                                               input);
 
     return AirportTakeFlightBindWithFlightDescriptor(
         params,
-        function_info.function->flight_info->descriptor(),
+        function_info.function->descriptor(),
         context,
         input, return_types, names, nullptr,
         std::make_shared<const AirportGetFlightInfoTableFunctionParameters>(tf_params));
@@ -1202,7 +1205,7 @@ namespace duckdb
 
     for (auto &function : contents->table_functions)
     {
-      FunctionCatalogSchemaName function_key{function.catalog_name, function.schema_name, function.name};
+      FunctionCatalogSchemaName function_key{function.catalog_name(), function.schema_name(), function.name()};
       functions_by_name[function_key].emplace_back(function);
     }
 
@@ -1216,7 +1219,7 @@ namespace duckdb
         // These input types are available since they are specified in the metadata, but the
         // schema that is returned likely should be requested dynamically from the dynamic
         // flight function.
-        auto input_types = AirportSchemaToLogicalTypesWithNaming(context, function.input_schema, function.location, function.flight_info->descriptor());
+        auto input_types = AirportSchemaToLogicalTypesWithNaming(context, function.input_schema(), function.location(), function.descriptor());
 
         // Determine if we have a table input.
         bool has_table_input = false;
@@ -1228,7 +1231,7 @@ namespace duckdb
         FunctionDescription description;
         description.parameter_types = input_types.positional;
         description.parameter_names = input_types.positional_names;
-        description.description = function.description;
+        description.description = function.description();
         function_descriptions.push_back(std::move(description));
 
         TableFunction table_func;

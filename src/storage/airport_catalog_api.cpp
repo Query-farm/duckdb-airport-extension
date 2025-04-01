@@ -436,15 +436,14 @@ namespace duckdb
     return get_result;
   }
 
-  static std::unique_ptr<AirportSerializedFlightAppMetadata> ParseFlightAppMetadata(const string &app_metadata, const string &server_location)
+  static const AirportSerializedFlightAppMetadata ParseFlightAppMetadata(const string &app_metadata, const string &server_location)
   {
     AIRPORT_MSGPACK_UNPACK(AirportSerializedFlightAppMetadata,
                            app_metadata_obj,
                            app_metadata,
                            server_location,
                            "Failed to parse Flight app_metadata");
-
-    return std::make_unique<AirportSerializedFlightAppMetadata>(app_metadata_obj);
+    return app_metadata_obj;
   }
 
   void handle_flight_app_metadata(const string &app_metadata,
@@ -455,54 +454,26 @@ namespace duckdb
                                   unique_ptr<AirportSchemaContents> &contents)
   {
     auto parsed_app_metadata = ParseFlightAppMetadata(app_metadata, location);
-    if (!(parsed_app_metadata->catalog == target_catalog && parsed_app_metadata->schema == target_schema))
+    if (!(parsed_app_metadata.catalog == target_catalog && parsed_app_metadata.schema == target_schema))
     {
-      throw IOException("Mismatch in metadata for catalog " + parsed_app_metadata->catalog + " schema " + parsed_app_metadata->schema + " expected " + target_catalog + " schema " + target_schema);
+      throw IOException("Mismatch in metadata for catalog " + parsed_app_metadata.catalog + " schema " + parsed_app_metadata.schema + " expected " + target_catalog + " schema " + target_schema);
     }
 
-    if (parsed_app_metadata->type == "table")
+    if (parsed_app_metadata.type == "table")
     {
       contents->tables.emplace_back(AirportAPITable(
           location,
           *flight_info,
           parsed_app_metadata));
     }
-    else if (parsed_app_metadata->type == "table_function")
+    else if (parsed_app_metadata.type == "table_function")
     {
-      AirportAPITableFunction function;
-
-      function.location = location;
-      function.flight_info = std::move(flight_info);
-      function.catalog_name = parsed_app_metadata->catalog;
-      function.schema_name = parsed_app_metadata->schema;
-      function.name = parsed_app_metadata->name;
-      function.comment = parsed_app_metadata->comment;
-      function.action_name = parsed_app_metadata->action_name.value_or("");
-      function.description = parsed_app_metadata->description.value_or("");
-
-      if (!parsed_app_metadata->input_schema.has_value())
-      {
-        throw IOException("Table Function metadata does not have an input_schema defined for function " + function.schema_name + "." + function.name);
-      }
-
-      auto serialized_schema = parsed_app_metadata->input_schema.value();
-
-      arrow::io::BufferReader parameter_schema_reader(
-          std::make_shared<arrow::Buffer>(serialized_schema));
-
-      arrow::ipc::DictionaryMemo in_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
-          auto parameter_schema,
-          arrow::ipc::ReadSchema(&parameter_schema_reader, &in_memo),
+      contents->table_functions.emplace_back(AirportAPITableFunction(
           location,
-          function.flight_info->descriptor(),
-          "Read serialized input schema");
-
-      function.input_schema = parameter_schema;
-
-      contents->table_functions.emplace_back(function);
+          *flight_info,
+          parsed_app_metadata));
     }
-    else if (parsed_app_metadata->type == "scalar_function")
+    else if (parsed_app_metadata.type == "scalar_function")
     {
       contents->scalar_functions.emplace_back(AirportAPIScalarFunction(
           location,
@@ -511,7 +482,7 @@ namespace duckdb
     }
     else
     {
-      throw IOException("Unknown object type in app_metadata: " + parsed_app_metadata->type);
+      throw IOException("Unknown object type in app_metadata: " + parsed_app_metadata.type);
     }
   }
 
