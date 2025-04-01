@@ -242,18 +242,6 @@ namespace duckdb
               parsed_app_metadata)
     {
     }
-
-    AirportAPITable(
-        const std::string &server_location,
-        const arrow::flight::FlightInfo &flight_info,
-        const AirportSerializedFlightAppMetadata &parsed_app_metadata)
-        : AirportAPITable(
-              server_location,
-              flight_info.descriptor(),
-              AirportAPIObjectBase::GetSchema(server_location, flight_info),
-              parsed_app_metadata)
-    {
-    }
   };
 
   struct AirportAPIScalarFunction : AirportAPIObjectBase

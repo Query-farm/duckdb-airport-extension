@@ -261,21 +261,20 @@ namespace duckdb
 
     ret->trace_id = trace_uuid;
     ret->table_function_parameters = table_function_parameters;
-    auto &data = *ret;
 
-    // Convert the C++ schema into the C format schema, but store it on the bind
-    // information
-    //    std::shared_ptr<arrow::Schema> info_schema;
-    //    arrow::ipc::DictionaryMemo dictionary_memo;
-    // AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
-    //                                                    ret->scan_data->flight_info_->GetSchema(&dictionary_memo),
-    //                                                    take_flight_params.server_location,
-    //                                                    descriptor,
-    //                                                    "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+        ExportSchema(*schema, &ret->schema_root.arrow_schema),
+        take_flight_params.server_location(),
+        descriptor,
+        "ExportSchema");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*schema, &data.schema_root.arrow_schema), take_flight_params.server_location(), descriptor, "ExportSchema");
-
-    AirportTakeFlightDetermineNamesAndTypes(data.schema_root, context, return_types, names, data.arrow_table, ret->rowid_column_index);
+    AirportTakeFlightDetermineNamesAndTypes(
+        ret->schema_root,
+        context,
+        return_types,
+        names,
+        ret->arrow_table,
+        ret->rowid_column_index);
 
     return std::move(ret);
   }
@@ -313,8 +312,6 @@ namespace duckdb
     const auto info = reinterpret_cast<duckdb::AirportAPITable *>(input.inputs[0].GetPointer());
 
     auto params = AirportTakeFlightParameters(info->server_location(), context, input);
-
-    //    std::shared_ptr<const flight::FlightInfo> *>(input.inputs[1].GetPointer());
 
     // The transaction identifier is passed as the 2nd argument.
     if (!input.inputs[1].IsNull())

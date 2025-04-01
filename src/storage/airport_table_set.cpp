@@ -347,8 +347,7 @@ namespace duckdb
     std::string_view serialized_flight_info(reinterpret_cast<const char *>(flight_info_buffer->body->data()), flight_info_buffer->body->size());
 
     // Now how to we deserialize the flight info from that buffer...
-    std::shared_ptr<flight::FlightInfo> flight_info;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "");
 
     // We aren't interested in anything after the first result.
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
@@ -383,7 +382,8 @@ namespace duckdb
 
     // This uses a special constructor because we don't have the parsing from the Catalog its custom Created
     table_entry->table_data = make_uniq<AirportAPITable>(server_location,
-                                                         *flight_info,
+                                                         flight_info->descriptor(),
+                                                         AirportAPIObjectBase::GetSchema(server_location, *flight_info),
                                                          created_table_metadata);
 
     return CreateEntry(std::move(table_entry));

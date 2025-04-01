@@ -128,13 +128,6 @@ namespace duckdb
 
     std::unique_ptr<AirportTakeFlightParameters> take_flight_params = nullptr;
 
-    // This is the location of the flight server.
-    // string server_location;
-
-    // This is the auth token.
-    // string auth_token;
-
-    // unordered_map<string, std::vector<string>> user_supplied_headers;
     //  This is the token to use for the flight as supplied by the user.
     //  if its empty use the token from the server.
     // string ticket;
