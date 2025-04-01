@@ -11,10 +11,12 @@ namespace duckdb
   class AirportSchemaEntry : public SchemaCatalogEntry
   {
   public:
-    AirportSchemaEntry(Catalog &catalog, CreateSchemaInfo &info, AirportCurlPool &connection_pool, const string &cache_directory);
+    AirportSchemaEntry(Catalog &catalog,
+                       CreateSchemaInfo &info,
+                       AirportCurlPool &connection_pool,
+                       const string &cache_directory,
+                       const AirportAPISchema &schema_data);
     ~AirportSchemaEntry() override;
-
-    unique_ptr<AirportAPISchema> schema_data;
 
   public:
     optional_ptr<CatalogEntry> CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) override;
@@ -37,7 +39,14 @@ namespace duckdb
     void DropEntry(ClientContext &context, DropInfo &info) override;
     optional_ptr<CatalogEntry> GetEntry(CatalogTransaction transaction, CatalogType type, const string &name) override;
 
+    std::shared_ptr<AirportSerializedContentsWithSHA256Hash> serialized_source() const
+    {
+      return schema_data_.source();
+    }
+
   private:
+    AirportAPISchema schema_data_;
+
     AirportCatalogSet &GetCatalogSet(CatalogType type);
     AirportTableSet tables;
     AirportScalarFunctionSet scalar_functions;

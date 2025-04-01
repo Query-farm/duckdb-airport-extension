@@ -234,16 +234,14 @@ namespace duckdb
     // Import the record batch into the the C++ side of Arrow and write it
     // to the stream.
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, gstate.schema),
-        gstate.table.table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table.table_data, "");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         gstate.writer->WriteRecordBatch(*record_batch),
-        gstate.table.table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table.table_data, "");
 
     // Since we wrote a batch I'd like to read the data returned if we are returning chunks.
     if (gstate.return_chunk)

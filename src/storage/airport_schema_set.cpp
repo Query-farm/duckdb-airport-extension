@@ -116,8 +116,7 @@ namespace duckdb
 
       info.schema = schema.schema_name();
       info.internal = IsInternalTable(schema.catalog_name(), schema.schema_name());
-      auto schema_entry = make_uniq<AirportSchemaEntry>(catalog, info, connection_pool, cache_path);
-      schema_entry->schema_data = make_uniq<AirportAPISchema>(schema);
+      auto schema_entry = make_uniq<AirportSchemaEntry>(catalog, info, connection_pool, cache_path, schema);
 
       // Since these are DuckDB attributes, we need to copy them manually.
       schema_entry->comment = schema.comment();
@@ -180,7 +179,7 @@ namespace duckdb
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 
     unordered_map<string, string> empty;
-    auto real_schema = make_uniq<AirportAPISchema>(
+    auto real_entry = AirportAPISchema(
         catalog.GetName(),
         info.schema,
         "",
@@ -188,9 +187,7 @@ namespace duckdb
         nullptr);
     string cache_path = DuckDBHomeDirectory(context);
 
-    auto schema_entry = make_uniq<AirportSchemaEntry>(catalog, info, connection_pool, cache_path);
-
-    schema_entry->schema_data = std::move(real_schema);
+    auto schema_entry = make_uniq<AirportSchemaEntry>(catalog, info, connection_pool, cache_path, real_entry);
 
     return CreateEntry(std::move(schema_entry));
   }

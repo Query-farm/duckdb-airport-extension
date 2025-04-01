@@ -20,8 +20,10 @@
 namespace duckdb
 {
 
-  AirportSchemaEntry::AirportSchemaEntry(Catalog &catalog, CreateSchemaInfo &info, AirportCurlPool &connection_pool, const string &cache_directory)
-      : SchemaCatalogEntry(catalog, info), tables(connection_pool, *this, cache_directory), scalar_functions(connection_pool, *this, cache_directory), table_functions(connection_pool, *this, cache_directory)
+  AirportSchemaEntry::AirportSchemaEntry(Catalog &catalog,
+                                         CreateSchemaInfo &info, AirportCurlPool &connection_pool, const string &cache_directory,
+                                         const AirportAPISchema &schema_data)
+      : SchemaCatalogEntry(catalog, info), schema_data_(schema_data), tables(connection_pool, *this, cache_directory), scalar_functions(connection_pool, *this, cache_directory), table_functions(connection_pool, *this, cache_directory)
   {
   }
 
