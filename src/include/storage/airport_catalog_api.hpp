@@ -7,6 +7,7 @@
 #include <msgpack.hpp>
 #include "airport_macros.hpp"
 #include <arrow/io/memory.h>
+#include "airport_location_descriptor.hpp"
 
 namespace duckdb
 {
@@ -115,7 +116,7 @@ namespace duckdb
         action_name, description)
   };
 
-  struct AirportAPIObjectBase
+  struct AirportAPIObjectBase : public AirportLocationDescriptor
   {
 
   public:
@@ -127,24 +128,13 @@ namespace duckdb
         const std::string &schema_name,
         const std::string &name,
         const std::string &comment)
-        : descriptor_(descriptor),
+        : AirportLocationDescriptor(server_location, descriptor),
           schema_(schema),
-          server_location_(server_location),
           catalog_name_(catalog),
           schema_name_(schema_name),
           name_(name),
           comment_(comment)
     {
-    }
-
-    const std::string &server_location() const
-    {
-      return server_location_;
-    }
-
-    const flight::FlightDescriptor &descriptor() const
-    {
-      return descriptor_;
     }
 
     const std::shared_ptr<arrow::Schema> schema() const
@@ -188,10 +178,7 @@ namespace duckdb
     }
 
   private:
-    arrow::flight::FlightDescriptor descriptor_;
     std::shared_ptr<arrow::Schema> schema_;
-
-    string server_location_;
     string catalog_name_;
     string schema_name_;
     string name_;

@@ -30,16 +30,6 @@ namespace duckdb
   {
   public:
     AirportTakeFlightScanData(
-        const string &flight_server_location,
-        const flight::FlightDescriptor &flight_descriptor,
-        std::shared_ptr<arrow::Schema> schema,
-        std::shared_ptr<flight::FlightStreamReader> stream) : AirportLocationDescriptor(flight_server_location, flight_descriptor),
-                                                              schema_(schema),
-                                                              stream_(stream)
-    {
-    }
-
-    AirportTakeFlightScanData(
         const AirportLocationDescriptor &location_descriptor,
         std::shared_ptr<arrow::Schema> schema,
         std::shared_ptr<flight::FlightStreamReader> stream) : AirportLocationDescriptor(location_descriptor),
@@ -178,7 +168,7 @@ namespace duckdb
   class AirportArrowArrayStreamWrapper : public duckdb::ArrowArrayStreamWrapper, public AirportLocationDescriptor
   {
   public:
-    AirportArrowArrayStreamWrapper(const string &flight_server_location, const flight::FlightDescriptor &flight_descriptor) : AirportLocationDescriptor(flight_server_location, flight_descriptor) {}
+    AirportArrowArrayStreamWrapper(const AirportLocationDescriptor &location_descriptor) : AirportLocationDescriptor(location_descriptor) {}
 
     shared_ptr<ArrowArrayWrapper> GetNextChunk();
   };

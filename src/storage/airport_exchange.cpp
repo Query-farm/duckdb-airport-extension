@@ -116,8 +116,7 @@ namespace duckdb
     //
     // But we can simulate most of that here.
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
-        airport_table.table_data->server_location(),
-        airport_table.table_data->descriptor(),
+        *airport_table.table_data,
         airport_table.table_data->schema(),
         std::move(exchange_result.reader));
 

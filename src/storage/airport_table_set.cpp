@@ -921,8 +921,7 @@ namespace duckdb
         "airport_dynamic_table_function: send schema");
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
-        server_location,
-        bind_data.scan_data->descriptor(),
+        *bind_data.scan_data,
         bind_data.scan_data->schema(),
         std::move(exchange_result.reader));
 

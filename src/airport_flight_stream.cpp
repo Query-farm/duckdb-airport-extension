@@ -142,7 +142,7 @@ namespace duckdb
 
     // Create arrow stream
     //    auto stream_wrapper = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();
-    auto stream_wrapper = duckdb::make_uniq<AirportArrowArrayStreamWrapper>(buffer_data->server_location(), buffer_data->descriptor());
+    auto stream_wrapper = duckdb::make_uniq<AirportArrowArrayStreamWrapper>(*buffer_data);
     stream_wrapper->arrow_array_stream.release = nullptr;
 
     auto maybe_ok = arrow::ExportRecordBatchReader(
