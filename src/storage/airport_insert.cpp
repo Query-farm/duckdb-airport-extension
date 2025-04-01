@@ -289,20 +289,18 @@ namespace duckdb
     appender->Append(ustate.returning_data_chunk, 0, ustate.returning_data_chunk.size(), ustate.returning_data_chunk.size());
     ArrowArray arr = appender->Finalize();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, gstate.schema),
-        gstate.table->table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table->table_data, "");
 
     // Acquire a lock because we don't want other threads to be writing to the same streams
     // at the same time.
     lock_guard<mutex> delete_guard(gstate.insert_lock);
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         gstate.writer->WriteRecordBatch(*record_batch),
-        gstate.table->table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table->table_data, "");
 
     // Since we wrote a batch I'd like to read the data returned if we are returning chunks.
     if (gstate.return_chunk)

@@ -447,37 +447,41 @@ namespace duckdb
   }
 
   void handle_flight_app_metadata(const string &app_metadata,
-                                  const string &target_catalog,
-                                  const string &target_schema,
-                                  const string &location,
-                                  const std::shared_ptr<arrow::flight::FlightInfo> &flight_info,
+                                  const string &catalog_name,
+                                  const string &schema_name,
+                                  const string &server_location,
+                                  const flight::FlightDescriptor &descriptor,
+                                  std::shared_ptr<arrow::Schema> schema,
                                   unique_ptr<AirportSchemaContents> &contents)
   {
-    auto parsed_app_metadata = ParseFlightAppMetadata(app_metadata, location);
-    if (!(parsed_app_metadata.catalog == target_catalog && parsed_app_metadata.schema == target_schema))
+    auto parsed_app_metadata = ParseFlightAppMetadata(app_metadata, server_location);
+    if (!(parsed_app_metadata.catalog == catalog_name && parsed_app_metadata.schema == schema_name))
     {
-      throw IOException("Mismatch in metadata for catalog " + parsed_app_metadata.catalog + " schema " + parsed_app_metadata.schema + " expected " + target_catalog + " schema " + target_schema);
+      throw IOException("Mismatch in metadata for catalog " + parsed_app_metadata.catalog + " schema " + parsed_app_metadata.schema + " expected " + catalog_name + " schema " + schema_name);
     }
 
     if (parsed_app_metadata.type == "table")
     {
       contents->tables.emplace_back(AirportAPITable(
-          location,
-          *flight_info,
+          server_location,
+          descriptor,
+          schema,
           parsed_app_metadata));
     }
     else if (parsed_app_metadata.type == "table_function")
     {
       contents->table_functions.emplace_back(AirportAPITableFunction(
-          location,
-          *flight_info,
+          server_location,
+          descriptor,
+          schema,
           parsed_app_metadata));
     }
     else if (parsed_app_metadata.type == "scalar_function")
     {
       contents->scalar_functions.emplace_back(AirportAPIScalarFunction(
-          location,
-          *flight_info,
+          server_location,
+          descriptor,
+          schema,
           parsed_app_metadata));
     }
     else
@@ -539,7 +543,11 @@ namespace duckdb
         auto app_metadata = flight_info->app_metadata();
         if (!app_metadata.empty())
         {
-          handle_flight_app_metadata(app_metadata, catalog, schema, server_location, std::move(flight_info), contents);
+          auto output_schema = AirportAPIObjectBase::GetSchema(server_location, *flight_info);
+
+          handle_flight_app_metadata(app_metadata, catalog, schema, server_location,
+                                     flight_info->descriptor(),
+                                     output_schema, contents);
         }
       }
 
@@ -568,7 +576,8 @@ namespace duckdb
         auto app_metadata = flight_info->app_metadata();
         if (!app_metadata.empty())
         {
-          handle_flight_app_metadata(app_metadata, catalog, schema, server_location, flight_info, contents);
+          auto output_schema = AirportAPIObjectBase::GetSchema(server_location, *flight_info);
+          handle_flight_app_metadata(app_metadata, catalog, schema, server_location, flight_info->descriptor(), output_schema, contents);
         }
         AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), server_location, "");
       }

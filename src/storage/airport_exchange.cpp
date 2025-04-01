@@ -61,11 +61,10 @@ namespace duckdb
                                          vector<string> destination_chunk_column_names,
                                          std::optional<string> transaction_id)
   {
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         global_state->schema,
         arrow::ImportSchema(&send_schema),
-        airport_table.table_data->server_location(),
-        airport_table.table_data->descriptor(),
+        airport_table.table_data,
         "");
 
     global_state->flight_descriptor = airport_table.table_data->descriptor();
@@ -96,17 +95,15 @@ namespace duckdb
 
     airport_add_flight_path_header(call_options, global_state->flight_descriptor);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto exchange_result,
         flight_client->DoExchange(call_options, global_state->flight_descriptor),
-        airport_table.table_data->server_location(),
-        global_state->flight_descriptor, "");
+        airport_table.table_data, "");
 
     // Tell the server the schema that we will be using to write data.
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         exchange_result.writer->Begin(global_state->schema),
-        airport_table.table_data->server_location(),
-        global_state->flight_descriptor,
+        airport_table.table_data,
         "Begin schema");
 
     // Now that there is a reader stream and a writer stream, we want to reuse the Arrow
@@ -133,18 +130,17 @@ namespace duckdb
 
     if (return_chunk)
     {
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto read_schema,
-                                                         scan_bind_data->scan_data->stream()->GetSchema(),
-                                                         airport_table.table_data->server_location(),
-                                                         global_state->flight_descriptor, "");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
+                                               scan_bind_data->scan_data->stream()->GetSchema(),
+                                               airport_table.table_data,
+                                               "");
 
       // printf("Schema of reader stream is:\n----------\n%s\n---------\n", read_schema->ToString().c_str());
 
       auto &data = *scan_bind_data;
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+      AIRPORT_ARROW_ASSERT_OK_CONTAINER(
           ExportSchema(*read_schema, &data.schema_root.arrow_schema),
-          airport_table.table_data->server_location(),
-          global_state->flight_descriptor,
+          airport_table.table_data,
           "ExportSchema");
 
       vector<string> reading_arrow_column_names;

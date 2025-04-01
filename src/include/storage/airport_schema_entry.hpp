@@ -39,8 +39,6 @@ namespace duckdb
 
   private:
     AirportCatalogSet &GetCatalogSet(CatalogType type);
-
-  private:
     AirportTableSet tables;
     AirportScalarFunctionSet scalar_functions;
     AirportTableFunctionSet table_functions;

@@ -204,7 +204,7 @@ namespace duckdb
       return input_schema_;
     }
 
-  protected:
+  public:
     static std::shared_ptr<arrow::Schema> GetSchema(
         const std::string &server_location,
         const arrow::flight::FlightInfo &flight_info)
@@ -261,11 +261,12 @@ namespace duckdb
 
     AirportAPIScalarFunction(
         const std::string &server_location,
-        const arrow::flight::FlightInfo &flight_info,
+        const arrow::flight::FlightDescriptor &descriptor,
+        std::shared_ptr<arrow::Schema> schema,
         const AirportSerializedFlightAppMetadata &parsed_app_metadata)
         : AirportAPIObjectBase(
-              flight_info.descriptor(),
-              AirportAPIObjectBase::GetSchema(server_location, flight_info),
+              descriptor,
+              schema,
               server_location,
               parsed_app_metadata)
     {
@@ -290,8 +291,6 @@ namespace duckdb
   {
   private:
     string description_;
-    // The schema of the input to the function.
-    std::shared_ptr<arrow::Schema> input_schema_;
     // The name of the action passed, if there is a single
     // flight that exists it can respond with different outputs
     // based on this name.
@@ -303,11 +302,12 @@ namespace duckdb
   public:
     AirportAPITableFunction(
         const std::string &server_location,
-        const arrow::flight::FlightInfo &flight_info,
+        const flight::FlightDescriptor &flight_descriptor,
+        std::shared_ptr<arrow::Schema> schema,
         const AirportSerializedFlightAppMetadata &parsed_app_metadata)
         : AirportAPIObjectBase(
-              flight_info.descriptor(),
-              AirportAPIObjectBase::GetSchema(server_location, flight_info),
+              flight_descriptor,
+              schema,
               server_location,
               parsed_app_metadata)
     {
