@@ -883,10 +883,11 @@ namespace duckdb
     call_options.headers.emplace_back("return-chunks", "1");
 
     auto &server_location = bind_data.take_flight_params->server_location();
+    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params->server_location());
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto exchange_result,
-        bind_data.flight_client->DoExchange(call_options, flight_descriptor),
+        flight_client->DoExchange(call_options, flight_descriptor),
         server_location,
         flight_descriptor, "");
 
@@ -933,7 +934,6 @@ namespace duckdb
         (uintptr_t)scan_data.get());
 
     scan_bind_data->scan_data = std::move(scan_data);
-    //    scan_bind_data->flight_client = bind_data.flight_client;
     scan_bind_data->server_location = server_location;
     scan_bind_data->trace_id = trace_uuid;
 

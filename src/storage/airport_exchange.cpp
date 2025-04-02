@@ -122,7 +122,6 @@ namespace duckdb
         (uintptr_t)scan_data.get());
 
     scan_bind_data->scan_data = std::move(scan_data);
-    scan_bind_data->flight_client = flight_client;
     scan_bind_data->server_location = airport_table.table_data->server_location();
     scan_bind_data->trace_id = trace_uuid;
 

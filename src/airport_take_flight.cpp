@@ -163,8 +163,6 @@ namespace duckdb
     // If the cached_flight_info_ptr is not null we should use the schema
     // from that flight info otherwise it should be requested.
 
-    auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location());
-
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options, take_flight_params, trace_uuid,
                                descriptor);
@@ -185,9 +183,11 @@ namespace duckdb
     {
 
       std::unique_ptr<arrow::flight::FlightInfo> retrieved_flight_info;
+      auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location());
 
       if (table_function_parameters != nullptr)
       {
+
         // Rather than calling GetFlightInfo we will call DoAction and get
         // get the flight info that way, since it allows us to serialize
         // all of the data we need to send instead of just the flight name.
@@ -256,7 +256,6 @@ namespace duckdb
 
     ret->estimated_records = estimated_records;
     ret->scan_data = std::move(scan_data);
-    ret->flight_client = flight_client;
     ret->take_flight_params = make_uniq<AirportTakeFlightParameters>(take_flight_params);
 
     ret->trace_id = trace_uuid;
@@ -551,12 +550,14 @@ namespace duckdb
     params.column_name = schema->name;
     params.type = duck_type.ToString();
 
+    auto flight_client = AirportAPI::FlightClientForLocation(data.take_flight_params->server_location());
+
     msgpack::pack(packed_buffer, params);
     arrow::flight::Action action{"get_flight_column_statistics",
                                  arrow::Buffer::FromString(packed_buffer.str())};
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            data.flight_client->DoAction(call_options, action),
+                                            flight_client->DoAction(call_options, action),
                                             server_location,
                                             "take_flight_statitics");
 
@@ -851,10 +852,12 @@ namespace duckdb
     // FIXME: somehow the flight should be marked if it supports predicate pushdown.
     // right now I'm not sure what this is.
     //
+    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params->server_location());
+
     result->endpoints = GetFlightEndpoints(bind_data.take_flight_params,
                                            bind_data.trace_id,
                                            bind_data.scan_data->descriptor(),
-                                           bind_data.flight_client,
+                                           flight_client,
                                            bind_data.json_filters,
                                            input.column_ids);
 
@@ -866,15 +869,13 @@ namespace duckdb
     auto &first_endpoint = result->endpoints[0];
     auto &first_location = first_endpoint.locations[0];
 
-    std::shared_ptr<flight::FlightClient> client = bind_data.flight_client;
     auto server_location = first_location.ToString();
     if (first_location != flight::Location::ReuseConnection())
     {
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto location_client,
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_client,
                                               flight::FlightClient::Connect(first_location),
                                               first_location.ToString(),
                                               "");
-      client = std::move(location_client);
       server_location = bind_data.take_flight_params->server_location();
     }
 
@@ -894,7 +895,7 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto stream,
-        client->DoGet(
+        flight_client->DoGet(
             call_options,
             first_endpoint.ticket),
         server_location,

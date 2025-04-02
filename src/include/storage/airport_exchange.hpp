@@ -14,7 +14,6 @@ namespace duckdb
   public:
     using ArrowScanFunctionData::ArrowScanFunctionData;
     std::unique_ptr<AirportTakeFlightScanData> scan_data = nullptr;
-    std::shared_ptr<arrow::flight::FlightClient> flight_client = nullptr;
 
     string server_location;
     string json_filters;
