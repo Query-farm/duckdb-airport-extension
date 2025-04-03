@@ -122,7 +122,7 @@ namespace duckdb
   public:
     AirportAPIObjectBase(
         const arrow::flight::FlightDescriptor &descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         const std::string &server_location,
         const std::string &catalog,
         const std::string &schema_name,
@@ -161,7 +161,7 @@ namespace duckdb
 
     AirportAPIObjectBase(
         const arrow::flight::FlightDescriptor &descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         const std::string &server_location,
         const AirportSerializedFlightAppMetadata &parsed_app_metadata) : AirportAPIObjectBase(descriptor,
                                                                                               schema,
@@ -174,7 +174,7 @@ namespace duckdb
     {
     }
 
-    const std::shared_ptr<arrow::Schema> schema() const
+    const std::shared_ptr<arrow::Schema> &schema() const
     {
       return schema_;
     }
@@ -221,11 +221,11 @@ namespace duckdb
 
   private:
     std::shared_ptr<arrow::Schema> input_schema_;
-    std::shared_ptr<arrow::Schema> schema_;
-    string catalog_name_;
-    string schema_name_;
-    string name_;
-    string comment_;
+    const std::shared_ptr<arrow::Schema> schema_;
+    const string catalog_name_;
+    const string schema_name_;
+    const string name_;
+    const string comment_;
   };
 
   struct AirportAPITable : AirportAPIObjectBase
@@ -233,7 +233,7 @@ namespace duckdb
     AirportAPITable(
         const std::string &server_location,
         const arrow::flight::FlightDescriptor &descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         const AirportSerializedFlightAppMetadata &parsed_app_metadata)
         : AirportAPIObjectBase(
               descriptor,
@@ -250,15 +250,15 @@ namespace duckdb
     AirportAPIScalarFunction(
         const std::string &server_location,
         const arrow::flight::FlightDescriptor &descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         const AirportSerializedFlightAppMetadata &parsed_app_metadata)
         : AirportAPIObjectBase(
               descriptor,
               schema,
               server_location,
-              parsed_app_metadata)
+              parsed_app_metadata),
+          description_(parsed_app_metadata.description.value_or(""))
     {
-      description_ = parsed_app_metadata.description.value_or("");
 
       if (input_schema() == nullptr)
       {
@@ -272,34 +272,34 @@ namespace duckdb
     }
 
   private:
-    string description_;
+    const string description_;
   };
 
   struct AirportAPITableFunction : AirportAPIObjectBase
   {
   private:
-    string description_;
+    const string description_;
     // The name of the action passed, if there is a single
     // flight that exists it can respond with different outputs
     // based on this name.
-    string action_name_;
+    const string action_name_;
 
     // The location of the flight server that will prduce the data.
-    string location_;
+    const string location_;
 
   public:
     AirportAPITableFunction(
         const std::string &server_location,
         const flight::FlightDescriptor &flight_descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         const AirportSerializedFlightAppMetadata &parsed_app_metadata)
         : AirportAPIObjectBase(
               flight_descriptor,
               schema,
               server_location,
-              parsed_app_metadata)
+              parsed_app_metadata),
+          description_(parsed_app_metadata.description.value_or(""))
     {
-      description_ = parsed_app_metadata.description.value_or("");
       if (input_schema() == nullptr)
       {
         throw IOException("Function metadata does not have an input_schema defined for function " + parsed_app_metadata.schema + "." + parsed_app_metadata.name);
@@ -329,7 +329,7 @@ namespace duckdb
                      const string &schema_name,
                      const string &comment,
                      const unordered_map<string, string> &tags,
-                     std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source)
+                     const std::shared_ptr<AirportSerializedContentsWithSHA256Hash> &source)
         : catalog_name_(catalog_name),
           schema_name_(schema_name),
           comment_(comment),
@@ -358,18 +358,17 @@ namespace duckdb
       return tags_;
     }
 
-    std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source() const
+    const std::shared_ptr<AirportSerializedContentsWithSHA256Hash> &source() const
     {
       return source_;
     }
 
   private:
-    string catalog_name_;
-    string schema_name_;
-    string comment_;
-    unordered_map<string, string> tags_;
-
-    std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source_;
+    const string catalog_name_;
+    const string schema_name_;
+    const string comment_;
+    const unordered_map<string, string> tags_;
+    const std::shared_ptr<AirportSerializedContentsWithSHA256Hash> source_;
   };
 
   struct AirportSchemaCollection
@@ -400,7 +399,8 @@ namespace duckdb
                                                             std::shared_ptr<const AirportSerializedContentsWithSHA256Hash> source,
                                                             const string &cache_base_dir,
                                                             std::shared_ptr<AirportAttachParameters> credentials);
-    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog, std::shared_ptr<AirportAttachParameters> credentials);
+    static unique_ptr<AirportSchemaCollection> GetSchemas(const string &catalog,
+                                                          const std::shared_ptr<AirportAttachParameters> &credentials);
 
     static void PopulateCatalogSchemaCacheFromURLorContent(CURL *curl,
                                                            const AirportSchemaCollection &collection,
@@ -411,7 +411,7 @@ namespace duckdb
 
     // The the rowid column type, LogicalType::INVALID if none is present.
     static LogicalType GetRowIdType(ClientContext &context,
-                                    std::shared_ptr<arrow::Schema> schema,
+                                    const std::shared_ptr<arrow::Schema> &schema,
                                     const string &location,
                                     const arrow::flight::FlightDescriptor &descriptor);
   };

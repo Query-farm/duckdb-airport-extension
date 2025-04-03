@@ -152,7 +152,7 @@ namespace duckdb
       vector<string> &names,
       // So rather than the cached_flight_info_ptr here we can just have the cached schema.
       std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<const AirportGetFlightInfoTableFunctionParameters> table_function_parameters)
+      const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters)
   {
     // Create a UID for tracing.
     const auto trace_uuid = airport_trace_id();
@@ -174,6 +174,7 @@ namespace duckdb
     // Get the information about the flight, this will allow the
     // endpoint information to be returned.
     unique_ptr<AirportTakeFlightScanData> scan_data;
+
     if (schema != nullptr)
     {
       scan_data = make_uniq<AirportTakeFlightScanData>(
@@ -186,7 +187,7 @@ namespace duckdb
       std::unique_ptr<arrow::flight::FlightInfo> retrieved_flight_info;
       auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
-      if (table_function_parameters != nullptr)
+      if (table_function_parameters != std::nullopt)
       {
         // Rather than calling GetFlightInfo we will call DoAction and get
         // get the flight info that way, since it allows us to serialize
@@ -269,7 +270,7 @@ namespace duckdb
         params,
         descriptor,
         context,
-        input, return_types, names, nullptr, nullptr);
+        input, return_types, names, nullptr, std::nullopt);
   }
 
   static unique_ptr<FunctionData> take_flight_bind_with_pointer(
@@ -305,7 +306,7 @@ namespace duckdb
         return_types,
         names,
         info->schema(),
-        nullptr);
+        std::nullopt);
   }
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)

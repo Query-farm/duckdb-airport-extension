@@ -286,9 +286,8 @@ namespace duckdb
       FlatVector::GetData<uint64_t>(output.data[4])[output_row_index] = flight_info->total_bytes();
       FlatVector::GetData<string_t>(output.data[5])[output_row_index] = StringVector::AddStringOrBlob(output.data[5], flight_info->app_metadata());
 
-      std::shared_ptr<arrow::Schema> info_schema;
       arrow::ipc::DictionaryMemo dictionary_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema, flight_info->GetSchema(&dictionary_memo), bind_data.server_location, descriptor, "");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto info_schema, flight_info->GetSchema(&dictionary_memo), bind_data.server_location, descriptor, "");
       FlatVector::GetData<string_t>(output.data[6])[output_row_index] = StringVector::AddStringOrBlob(output.data[6], info_schema->ToString());
 
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, global_state.listing->Next(), bind_data.server_location, "");

@@ -30,10 +30,11 @@ namespace duckdb
   {
     explicit AirportScalarFunctionLocalState(ClientContext &context,
                                              const AirportLocationDescriptor &location_descriptor,
-                                             std::shared_ptr<arrow::Schema> function_output_schema,
-                                             std::shared_ptr<arrow::Schema> function_input_schema) : AirportLocationDescriptor(location_descriptor),
-                                                                                                     function_output_schema_(function_output_schema),
-                                                                                                     function_input_schema_(function_input_schema)
+                                             const std::shared_ptr<arrow::Schema> &function_output_schema,
+                                             const std::shared_ptr<arrow::Schema> &function_input_schema)
+        : AirportLocationDescriptor(location_descriptor),
+          function_output_schema_(function_output_schema),
+          function_input_schema_(function_input_schema)
     {
       const auto trace_id = airport_trace_id();
 
@@ -180,19 +181,14 @@ namespace duckdb
     }
 
   public:
-    std::shared_ptr<arrow::Schema> function_input_schema() const
+    const std::shared_ptr<arrow::Schema> &function_input_schema() const
     {
       return function_input_schema_;
     }
 
-    std::shared_ptr<arrow::Schema> function_output_schema() const
+    const std::shared_ptr<arrow::Schema> &function_output_schema() const
     {
       return function_output_schema_;
-    }
-
-    const bool &input_schema_includes_any_types() const
-    {
-      return input_schema_includes_any_types_;
     }
 
     std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data;
@@ -202,16 +198,15 @@ namespace duckdb
     std::unique_ptr<arrow::flight::FlightStreamWriter> writer;
 
   private:
-    bool input_schema_includes_any_types_;
-    std::shared_ptr<arrow::Schema> function_output_schema_;
-    std::shared_ptr<arrow::Schema> function_input_schema_;
-    unique_ptr<arrow::flight::FlightClient> flight_client;
+    const std::shared_ptr<arrow::Schema> function_output_schema_;
+    const std::shared_ptr<arrow::Schema> function_input_schema_;
+    const unique_ptr<arrow::flight::FlightClient> flight_client;
   };
 
   struct AirportScalarFunctionBindData : public FunctionData
   {
   public:
-    explicit AirportScalarFunctionBindData(std::shared_ptr<arrow::Schema> input_schema) : input_schema_(input_schema)
+    explicit AirportScalarFunctionBindData(const std::shared_ptr<arrow::Schema> &input_schema) : input_schema_(input_schema)
     {
     }
 
@@ -226,13 +221,13 @@ namespace duckdb
       return input_schema_ == other.input_schema();
     }
 
-    std::shared_ptr<arrow::Schema> input_schema() const
+    const std::shared_ptr<arrow::Schema> &input_schema() const
     {
       return input_schema_;
     }
 
   private:
-    std::shared_ptr<arrow::Schema> input_schema_;
+    const std::shared_ptr<arrow::Schema> input_schema_;
   };
 
   unique_ptr<FunctionData> AirportScalarFunctionBind(ClientContext &context, ScalarFunction &bound_function,

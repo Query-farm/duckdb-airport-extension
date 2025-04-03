@@ -55,15 +55,15 @@ namespace duckdb
                                          const TableCatalogEntry &table,
                                          const AirportTableEntry &airport_table,
                                          AirportExchangeGlobalState *global_state,
-                                         ArrowSchema &send_schema,
-                                         bool return_chunk,
-                                         string exchange_operation,
-                                         vector<string> destination_chunk_column_names,
-                                         std::optional<string> transaction_id)
+                                         const ArrowSchema &send_schema,
+                                         const bool return_chunk,
+                                         const string exchange_operation,
+                                         const vector<string> destination_chunk_column_names,
+                                         const std::optional<string> transaction_id)
   {
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         global_state->schema,
-        arrow::ImportSchema(&send_schema),
+        arrow::ImportSchema((ArrowSchema *)&send_schema),
         airport_table.table_data,
         "");
 

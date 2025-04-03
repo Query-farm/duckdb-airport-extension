@@ -30,8 +30,8 @@ namespace duckdb
     }
 
   private:
-    string server_location_;
-    flight::FlightDescriptor descriptor_;
+    const string server_location_;
+    const flight::FlightDescriptor descriptor_;
   };
 
 }

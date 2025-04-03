@@ -834,7 +834,7 @@ namespace duckdb
         function_info.function->descriptor(),
         context,
         input, return_types, names, nullptr,
-        std::make_shared<const AirportGetFlightInfoTableFunctionParameters>(tf_params));
+        tf_params);
   }
 
   struct ArrowSchemaTableFunctionTypes
@@ -935,7 +935,7 @@ namespace duckdb
 
     call_options.headers.emplace_back("airport-operation", "table_in_out_function");
 
-    D_ASSERT(bind_data.table_function_parameters() != nullptr);
+    D_ASSERT(bind_data.table_function_parameters() != std::nullopt);
     auto &table_function_parameters = *bind_data.table_function_parameters();
     call_options.headers.emplace_back("airport-action-name", table_function_parameters.action_name);
 

@@ -3,9 +3,7 @@
 #include "airport_extension.hpp"
 #include "duckdb.hpp"
 
-#include "duckdb/function/table/arrow.hpp"
 #include "airport_flight_stream.hpp"
-#include <msgpack.hpp>
 
 namespace duckdb
 {
@@ -61,6 +59,6 @@ namespace duckdb
       vector<LogicalType> &return_types,
       vector<string> &names,
       std::shared_ptr<arrow::Schema> schema,
-      std::shared_ptr<const struct AirportGetFlightInfoTableFunctionParameters> table_function_parameters);
+      const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters);
 
 }

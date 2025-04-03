@@ -588,7 +588,7 @@ namespace duckdb
 
   LogicalType
   AirportAPI::GetRowIdType(ClientContext &context,
-                           std::shared_ptr<arrow::Schema> schema,
+                           const std::shared_ptr<arrow::Schema> &schema,
                            const string &location,
                            const arrow::flight::FlightDescriptor &descriptor)
   {
@@ -623,7 +623,8 @@ namespace duckdb
   }
 
   unique_ptr<AirportSchemaCollection>
-  AirportAPI::GetSchemas(const string &catalog_name, std::shared_ptr<AirportAttachParameters> credentials)
+  AirportAPI::GetSchemas(const string &catalog_name,
+                         const std::shared_ptr<AirportAttachParameters> &credentials)
   {
     auto result = make_uniq<AirportSchemaCollection>();
     arrow::flight::FlightCallOptions call_options;

@@ -38,7 +38,7 @@ namespace duckdb
         const AirportLocationDescriptor &location_descriptor,
         atomic<double> *progress,
         string *last_app_metadata,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         std::shared_ptr<flight::MetadataRecordBatchReader> delegate)
         : AirportLocationDescriptor(location_descriptor),
           schema_(std::move(schema)),
@@ -90,8 +90,8 @@ namespace duckdb
     }
 
   private:
-    std::shared_ptr<arrow::Schema> schema_;
-    std::shared_ptr<flight::MetadataRecordBatchReader> delegate_;
+    const std::shared_ptr<arrow::Schema> schema_;
+    const std::shared_ptr<flight::MetadataRecordBatchReader> delegate_;
     atomic<double> *progress_;
     string *last_app_metadata_;
   };

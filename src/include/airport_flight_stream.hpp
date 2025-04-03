@@ -31,14 +31,14 @@ namespace duckdb
   public:
     AirportTakeFlightScanData(
         const AirportLocationDescriptor &location_descriptor,
-        std::shared_ptr<arrow::Schema> schema,
+        const std::shared_ptr<arrow::Schema> &schema,
         std::shared_ptr<flight::FlightStreamReader> stream) : AirportLocationDescriptor(location_descriptor),
                                                               schema_(schema),
                                                               stream_(stream)
     {
     }
 
-    const std::shared_ptr<arrow::Schema> schema() const
+    const std::shared_ptr<arrow::Schema> &schema() const
     {
       return schema_;
     }
@@ -57,7 +57,7 @@ namespace duckdb
     string last_app_metadata_;
 
   private:
-    std::shared_ptr<arrow::Schema> schema_;
+    const std::shared_ptr<arrow::Schema> schema_;
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
   };
 
@@ -110,7 +110,7 @@ namespace duckdb
     }
 
   private:
-    string server_location_;
+    const string server_location_;
     string auth_token_;
     string secret_name_;
     // Override the ticket supplied from GetFlightInfo.
@@ -126,7 +126,7 @@ namespace duckdb
                               const string &trace_id,
                               const int64_t estimated_records,
                               const AirportTakeFlightParameters &take_flight_params_p,
-                              std::shared_ptr<const duckdb::AirportGetFlightInfoTableFunctionParameters> table_function_parameters_p,
+                              const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
                               std::shared_ptr<arrow::Schema> schema,
                               const flight::FlightDescriptor &descriptor,
                               std::unique_ptr<AirportTakeFlightScanData> scan_data_p,
@@ -175,7 +175,7 @@ namespace duckdb
       return take_flight_params_;
     }
 
-    std::shared_ptr<const duckdb::AirportGetFlightInfoTableFunctionParameters> table_function_parameters() const
+    const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters() const
     {
       return table_function_parameters_;
     }
@@ -197,17 +197,17 @@ namespace duckdb
 
   private:
     // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
-    string trace_id_;
+    const string trace_id_;
 
     // Store the estimated number of records in the flight, typically this is
     // returned from GetFlightInfo, but that could also come from the table itself.
     int64_t estimated_records_ = -1;
 
-    AirportTakeFlightParameters take_flight_params_;
-    std::shared_ptr<const duckdb::AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
+    const AirportTakeFlightParameters take_flight_params_;
+    const std::optional<AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
 
     std::unique_ptr<AirportTakeFlightScanData> scan_data_;
-    std::shared_ptr<arrow::Schema> schema_;
+    const std::shared_ptr<arrow::Schema> schema_;
   };
 
   duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
