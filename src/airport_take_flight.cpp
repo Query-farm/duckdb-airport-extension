@@ -82,18 +82,20 @@ namespace duckdb
   }
 
   static void AirportTakeFlightDetermineNamesAndTypes(
-      const ArrowSchemaWrapper &schema_root,
+      unique_ptr<AirportTakeFlightBindData> &bind_data,
       ClientContext &context,
       vector<LogicalType> &return_types,
-      vector<string> &names,
-      ArrowTableType &arrow_table,
-      idx_t &rowid_column_index)
+      vector<string> &names)
   {
+    auto &schema_root = bind_data->schema_root;
+    auto &arrow_table = bind_data->arrow_table;
+    auto &rowid_column_index = bind_data->rowid_column_index;
+
     rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
 
     auto &config = DBConfig::GetConfig(context);
 
-    idx_t num_columns = static_cast<idx_t>(schema_root.arrow_schema.n_children);
+    const idx_t num_columns = static_cast<idx_t>(schema_root.arrow_schema.n_children);
 
     if (num_columns > 0)
     {
@@ -130,9 +132,9 @@ namespace duckdb
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 
-      idx_t column_id = is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx;
+      const idx_t column_id = is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx;
 
-      string column_name = schema.name && *schema.name ? schema.name : "v" + to_string(col_idx);
+      const string column_name = schema.name && *schema.name ? schema.name : "v" + to_string(col_idx);
 
       if (!is_rowid_column)
       {
@@ -256,25 +258,17 @@ namespace duckdb
         (uintptr_t)scan_data.get(),
         trace_uuid,
         estimated_records,
-        take_flight_params);
-
-    ret->scan_data = std::move(scan_data);
-    //    ret->take_flight_params = make_uniq<AirportTakeFlightParameters>(take_flight_params);
-    ret->table_function_parameters = table_function_parameters;
-
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
-        ExportSchema(*schema, &ret->schema_root.arrow_schema),
-        take_flight_params.server_location(),
+        take_flight_params,
+        table_function_parameters,
+        schema,
         descriptor,
-        "ExportSchema");
+        std::move(scan_data));
 
     AirportTakeFlightDetermineNamesAndTypes(
-        ret->schema_root,
+        ret,
         context,
         return_types,
-        names,
-        ret->arrow_table,
-        ret->rowid_column_index);
+        names);
 
     return std::move(ret);
   }
@@ -302,8 +296,6 @@ namespace duckdb
       vector<LogicalType> &return_types,
       vector<string> &names)
   {
-    //    auto server_location = input.inputs[0].ToString();
-
     if (input.inputs[0].IsNull())
     {
       throw BinderException("airport: take_flight_with_pointer, pointers to AirportTable cannot be null");
@@ -381,7 +373,7 @@ namespace duckdb
     state.chunk_offset += output.size();
   }
 
-  static unique_ptr<NodeStatistics> take_flight_cardinality(ClientContext &context, const FunctionData *data)
+  static unique_ptr<NodeStatistics> airport_take_flight_cardinality(ClientContext &context, const FunctionData *data)
   {
     // To estimate the cardinality of the flight, we can peek at the flight information
     // that was retrieved during the bind function.
@@ -587,6 +579,7 @@ namespace duckdb
                                                                   TableFunctionInitInput &input)
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
+    auto &scan_data = bind_data.scan_data();
     auto result = make_uniq<AirportArrowScanGlobalState>();
 
     // Ideally this is where we call GetFlightInfo to obtain the endpoints, but
@@ -600,7 +593,7 @@ namespace duckdb
 
     result->endpoints = AirportGetFlightEndpoints(bind_data.take_flight_params(),
                                                   bind_data.trace_id(),
-                                                  bind_data.scan_data->descriptor(),
+                                                  bind_data.descriptor(),
                                                   flight_client,
                                                   bind_data.json_filters,
                                                   input.column_ids);
@@ -620,10 +613,10 @@ namespace duckdb
                                               flight::FlightClient::Connect(first_location),
                                               first_location.ToString(),
                                               "");
-      server_location = bind_data.take_flight_params().server_location();
+      server_location = bind_data.server_location();
     }
 
-    auto &descriptor = bind_data.scan_data->descriptor();
+    const auto &descriptor = bind_data.descriptor();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options, bind_data.take_flight_params(), bind_data.trace_id(),
@@ -643,10 +636,10 @@ namespace duckdb
             call_options,
             first_endpoint.ticket),
         server_location,
-        bind_data.scan_data->descriptor(),
+        descriptor,
         "");
 
-    bind_data.scan_data->setStream(std::move(stream));
+    scan_data->setStream(std::move(stream));
 
     result->stream = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get());
 
@@ -657,7 +650,7 @@ namespace duckdb
   {
     auto &bind_data = data->Cast<AirportTakeFlightBindData>();
     // FIXME: this will have to be adapted for multiple endpoints
-    return bind_data.scan_data->progress_ * 100.0;
+    return bind_data.scan_data()->progress_ * 100.0;
   }
 
   void AddTakeFlightFunction(DatabaseInstance &instance)
@@ -679,7 +672,7 @@ namespace duckdb
     take_flight_function_with_descriptor.named_parameters["headers"] = LogicalType::MAP(LogicalType::VARCHAR, LogicalType::VARCHAR);
     take_flight_function_with_descriptor.pushdown_complex_filter = take_flight_complex_filter_pushdown;
 
-    take_flight_function_with_descriptor.cardinality = take_flight_cardinality;
+    take_flight_function_with_descriptor.cardinality = airport_take_flight_cardinality;
     //    take_flight_function_with_descriptor.get_batch_index = nullptr;
     take_flight_function_with_descriptor.projection_pushdown = true;
     take_flight_function_with_descriptor.filter_pushdown = false;
@@ -701,7 +694,7 @@ namespace duckdb
     // Add support for optional named paraemters that would be appended to the descriptor
     // of the flight, ideally parameters would be JSON encoded.
 
-    take_flight_function_with_pointer.cardinality = take_flight_cardinality;
+    take_flight_function_with_pointer.cardinality = airport_take_flight_cardinality;
     //    take_flight_function_with_pointer.get_batch_index = nullptr;
     take_flight_function_with_pointer.projection_pushdown = true;
     take_flight_function_with_pointer.filter_pushdown = false;

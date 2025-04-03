@@ -17,7 +17,7 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "msgpack.hpp"
 #include "airport_location_descriptor.hpp"
-
+#include "airport_macros.hpp"
 namespace flight = arrow::flight;
 
 /// File copied from
@@ -119,22 +119,32 @@ namespace duckdb
     std::unordered_map<string, std::vector<string>> user_supplied_headers_;
   };
 
-  struct AirportTakeFlightBindData : public ArrowScanFunctionData
+  struct AirportTakeFlightBindData : public ArrowScanFunctionData, public AirportLocationDescriptor
   {
   public:
     AirportTakeFlightBindData(stream_factory_produce_t scanner_producer_p, uintptr_t stream_factory_ptr_p,
                               const string &trace_id,
                               const int64_t estimated_records,
                               const AirportTakeFlightParameters &take_flight_params_p,
+                              std::shared_ptr<const duckdb::AirportGetFlightInfoTableFunctionParameters> table_function_parameters_p,
+                              std::shared_ptr<arrow::Schema> schema,
+                              const flight::FlightDescriptor &descriptor,
+                              std::unique_ptr<AirportTakeFlightScanData> scan_data_p,
                               shared_ptr<DependencyItem> dependency = nullptr) : ArrowScanFunctionData(scanner_producer_p, stream_factory_ptr_p, std::move(dependency)),
+                                                                                 AirportLocationDescriptor(take_flight_params_p.server_location(), descriptor),
                                                                                  trace_id_(trace_id), estimated_records_(estimated_records),
-                                                                                 take_flight_params_(take_flight_params_p)
+                                                                                 take_flight_params_(take_flight_params_p),
+                                                                                 table_function_parameters_(table_function_parameters_p),
+                                                                                 scan_data_(std::move(scan_data_p)),
+                                                                                 schema_(schema)
 
     {
+      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+          ExportSchema(*schema, &schema_root.arrow_schema),
+          take_flight_params_.server_location(),
+          descriptor,
+          "ExportSchema");
     }
-
-    //    using ArrowScanFunctionData::ArrowScanFunctionData;
-    std::unique_ptr<AirportTakeFlightScanData> scan_data = nullptr;
 
     //    std::unique_ptr<AirportTakeFlightParameters> take_flight_params = nullptr;
 
@@ -149,9 +159,6 @@ namespace duckdb
     //
     // Its assumed that the work will be done in the LogicalUpdate or LogicalDelete
     bool skip_producing_result_for_update_or_delete = false;
-
-    // When doing a dynamic table function we need this.
-    std::shared_ptr<const AirportGetFlightInfoTableFunctionParameters> table_function_parameters;
 
     const string &trace_id() const
     {
@@ -168,6 +175,21 @@ namespace duckdb
       return take_flight_params_;
     }
 
+    std::shared_ptr<const duckdb::AirportGetFlightInfoTableFunctionParameters> table_function_parameters() const
+    {
+      return table_function_parameters_;
+    }
+
+    const std::unique_ptr<AirportTakeFlightScanData> &scan_data() const
+    {
+      return scan_data_;
+    }
+
+    const std::shared_ptr<arrow::Schema> &schema() const
+    {
+      return schema_;
+    }
+
   private:
     // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
     string trace_id_;
@@ -177,6 +199,10 @@ namespace duckdb
     int64_t estimated_records_ = -1;
 
     AirportTakeFlightParameters take_flight_params_;
+    std::shared_ptr<const duckdb::AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
+
+    std::unique_ptr<AirportTakeFlightScanData> scan_data_;
+    std::shared_ptr<arrow::Schema> schema_;
   };
 
   duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>

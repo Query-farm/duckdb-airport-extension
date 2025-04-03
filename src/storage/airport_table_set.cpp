@@ -862,9 +862,9 @@ namespace duckdb
                                      TableFunctionInitInput &input)
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
-
-    auto trace_uuid = airport_trace_id();
-    auto &flight_descriptor = bind_data.scan_data->descriptor();
+    const auto trace_uuid = airport_trace_id();
+    const auto &flight_descriptor = bind_data.descriptor();
+    const auto &server_location = bind_data.server_location();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options,
@@ -872,14 +872,13 @@ namespace duckdb
                                trace_uuid,
                                flight_descriptor);
 
-    auto &server_location = bind_data.take_flight_params().server_location();
-
     auto auth_token = AirportAuthTokenForLocation(context, server_location, "", "");
 
     call_options.headers.emplace_back("airport-operation", "table_in_out_function");
 
-    D_ASSERT(bind_data.table_function_parameters != nullptr);
-    call_options.headers.emplace_back("airport-action-name", bind_data.table_function_parameters->action_name);
+    D_ASSERT(bind_data.table_function_parameters() != nullptr);
+    auto &table_function_parameters = *bind_data.table_function_parameters();
+    call_options.headers.emplace_back("airport-action-name", table_function_parameters.action_name);
 
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", "1");
@@ -895,8 +894,8 @@ namespace duckdb
     // We have the serialized schema that we sent the server earlier so deserialize so we can
     // send it again.
     std::shared_ptr<arrow::Buffer> serialized_schema_buffer = std::make_shared<arrow::Buffer>(
-        reinterpret_cast<const uint8_t *>(bind_data.table_function_parameters->table_input_schema.data()),
-        bind_data.table_function_parameters->table_input_schema.size());
+        reinterpret_cast<const uint8_t *>(table_function_parameters.table_input_schema.data()),
+        table_function_parameters.table_input_schema.size());
 
     auto buffer_reader = std::make_shared<arrow::io::BufferReader>(serialized_schema_buffer);
 
@@ -909,8 +908,8 @@ namespace duckdb
 
     // Send the input set of parameters to the server.
     std::shared_ptr<arrow::Buffer> parameters_buffer = std::make_shared<arrow::Buffer>(
-        reinterpret_cast<const uint8_t *>(bind_data.table_function_parameters->parameters.data()),
-        bind_data.table_function_parameters->parameters.size());
+        reinterpret_cast<const uint8_t *>(table_function_parameters.parameters.data()),
+        table_function_parameters.parameters.size());
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
         exchange_result.writer->WriteMetadata(parameters_buffer),
@@ -926,8 +925,8 @@ namespace duckdb
         "airport_dynamic_table_function: send schema");
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
-        *bind_data.scan_data,
-        bind_data.scan_data->schema(),
+        *bind_data.scan_data(),
+        bind_data.schema(),
         std::move(exchange_result.reader));
 
     auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(

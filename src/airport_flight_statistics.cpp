@@ -190,7 +190,7 @@ namespace duckdb
     AirportGetFlightColumnStatistics params;
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
         params.flight_descriptor,
-        data.scan_data->descriptor().SerializeToString(),
+        data.descriptor().SerializeToString(),
         server_location,
         "take_flight_statistics");
     params.column_name = schema->name;
