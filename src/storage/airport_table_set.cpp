@@ -868,11 +868,13 @@ namespace duckdb
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options,
-                               *bind_data.take_flight_params,
+                               bind_data.take_flight_params(),
                                trace_uuid,
                                flight_descriptor);
 
-    auto auth_token = AirportAuthTokenForLocation(context, bind_data.take_flight_params->server_location(), "", "");
+    auto &server_location = bind_data.take_flight_params().server_location();
+
+    auto auth_token = AirportAuthTokenForLocation(context, server_location, "", "");
 
     call_options.headers.emplace_back("airport-operation", "table_in_out_function");
 
@@ -882,8 +884,7 @@ namespace duckdb
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", "1");
 
-    auto &server_location = bind_data.take_flight_params->server_location();
-    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params->server_location());
+    auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
         auto exchange_result,

@@ -253,12 +253,13 @@ namespace duckdb
     // consume.
     auto ret = make_uniq<AirportTakeFlightBindData>(
         (stream_factory_produce_t)&AirportCreateStream,
-        (uintptr_t)scan_data.get());
+        (uintptr_t)scan_data.get(),
+        trace_uuid,
+        estimated_records,
+        take_flight_params);
 
-    ret->estimated_records = estimated_records;
     ret->scan_data = std::move(scan_data);
-    ret->take_flight_params = make_uniq<AirportTakeFlightParameters>(take_flight_params);
-    ret->trace_id = trace_uuid;
+    //    ret->take_flight_params = make_uniq<AirportTakeFlightParameters>(take_flight_params);
     ret->table_function_parameters = table_function_parameters;
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
@@ -285,7 +286,7 @@ namespace duckdb
       vector<string> &names)
   {
     auto server_location = input.inputs[0].ToString();
-    auto params = AirportTakeFlightParameters(server_location, context, input);
+    AirportTakeFlightParameters params(server_location, context, input);
     auto descriptor = flight_descriptor_from_value(input.inputs[1]);
 
     return AirportTakeFlightBindWithFlightDescriptor(
@@ -310,7 +311,7 @@ namespace duckdb
 
     const auto info = reinterpret_cast<duckdb::AirportAPITable *>(input.inputs[0].GetPointer());
 
-    auto params = AirportTakeFlightParameters(info->server_location(), context, input);
+    AirportTakeFlightParameters params(info->server_location(), context, input);
 
     // The transaction identifier is passed as the 2nd argument.
     if (!input.inputs[1].IsNull())
@@ -388,7 +389,7 @@ namespace duckdb
     // This estimate does not take into account any filters that may have been applied
     //
     auto &bind_data = data->Cast<AirportTakeFlightBindData>();
-    auto flight_estimated_records = bind_data.estimated_records;
+    auto flight_estimated_records = bind_data.estimated_records();
 
     if (flight_estimated_records != -1)
     {
@@ -525,7 +526,7 @@ namespace duckdb
   };
 
   static vector<flight::FlightEndpoint> AirportGetFlightEndpoints(
-      const std::unique_ptr<AirportTakeFlightParameters> &take_flight_params,
+      const AirportTakeFlightParameters &take_flight_params,
       const string &trace_id,
       const flight::FlightDescriptor &descriptor,
       std::shared_ptr<flight::FlightClient> flight_client,
@@ -534,9 +535,9 @@ namespace duckdb
   {
     vector<flight::FlightEndpoint> endpoints;
     arrow::flight::FlightCallOptions call_options;
-    auto &server_location = take_flight_params->server_location();
+    auto &server_location = take_flight_params.server_location();
 
-    airport_add_normal_headers(call_options, *take_flight_params, trace_id,
+    airport_add_normal_headers(call_options, take_flight_params, trace_id,
                                descriptor);
 
     AirportGetFlightEndpointsRequest endpoints_request;
@@ -595,10 +596,10 @@ namespace duckdb
     // FIXME: somehow the flight should be marked if it supports predicate pushdown.
     // right now I'm not sure what this is.
     //
-    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params->server_location());
+    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params().server_location());
 
-    result->endpoints = AirportGetFlightEndpoints(bind_data.take_flight_params,
-                                                  bind_data.trace_id,
+    result->endpoints = AirportGetFlightEndpoints(bind_data.take_flight_params(),
+                                                  bind_data.trace_id(),
                                                   bind_data.scan_data->descriptor(),
                                                   flight_client,
                                                   bind_data.json_filters,
@@ -619,13 +620,13 @@ namespace duckdb
                                               flight::FlightClient::Connect(first_location),
                                               first_location.ToString(),
                                               "");
-      server_location = bind_data.take_flight_params->server_location();
+      server_location = bind_data.take_flight_params().server_location();
     }
 
     auto &descriptor = bind_data.scan_data->descriptor();
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, *bind_data.take_flight_params, bind_data.trace_id,
+    airport_add_normal_headers(call_options, bind_data.take_flight_params(), bind_data.trace_id(),
                                descriptor);
 
     if (bind_data.skip_producing_result_for_update_or_delete)

@@ -181,11 +181,11 @@ namespace duckdb
     // printf("Can produce statistics for this flight\n");
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, *data.take_flight_params, data.trace_id);
+    airport_add_normal_headers(call_options, data.take_flight_params(), data.trace_id());
 
     std::stringstream packed_buffer;
 
-    auto &server_location = data.take_flight_params->server_location();
+    auto &server_location = data.take_flight_params().server_location();
 
     AirportGetFlightColumnStatistics params;
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
@@ -196,7 +196,7 @@ namespace duckdb
     params.column_name = schema->name;
     params.type = duck_type.ToString();
 
-    auto flight_client = AirportAPI::FlightClientForLocation(data.take_flight_params->server_location());
+    auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
     msgpack::pack(packed_buffer, params);
     arrow::flight::Action action{"get_flight_column_statistics",

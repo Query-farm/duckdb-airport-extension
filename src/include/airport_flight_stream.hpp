@@ -122,19 +122,23 @@ namespace duckdb
   struct AirportTakeFlightBindData : public ArrowScanFunctionData
   {
   public:
-    using ArrowScanFunctionData::ArrowScanFunctionData;
+    AirportTakeFlightBindData(stream_factory_produce_t scanner_producer_p, uintptr_t stream_factory_ptr_p,
+                              const string &trace_id,
+                              const int64_t estimated_records,
+                              const AirportTakeFlightParameters &take_flight_params_p,
+                              shared_ptr<DependencyItem> dependency = nullptr) : ArrowScanFunctionData(scanner_producer_p, stream_factory_ptr_p, std::move(dependency)),
+                                                                                 trace_id_(trace_id), estimated_records_(estimated_records),
+                                                                                 take_flight_params_(take_flight_params_p)
+
+    {
+    }
+
+    //    using ArrowScanFunctionData::ArrowScanFunctionData;
     std::unique_ptr<AirportTakeFlightScanData> scan_data = nullptr;
 
-    std::unique_ptr<AirportTakeFlightParameters> take_flight_params = nullptr;
-
-    //  This is the token to use for the flight as supplied by the user.
-    //  if its empty use the token from the server.
-    // string ticket;
+    //    std::unique_ptr<AirportTakeFlightParameters> take_flight_params = nullptr;
 
     string json_filters;
-
-    // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
-    string trace_id;
 
     idx_t rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
 
@@ -149,9 +153,30 @@ namespace duckdb
     // When doing a dynamic table function we need this.
     std::shared_ptr<const AirportGetFlightInfoTableFunctionParameters> table_function_parameters;
 
+    const string &trace_id() const
+    {
+      return trace_id_;
+    }
+
+    const int64_t estimated_records() const
+    {
+      return estimated_records_;
+    }
+
+    const AirportTakeFlightParameters &take_flight_params() const
+    {
+      return take_flight_params_;
+    }
+
+  private:
+    // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
+    string trace_id_;
+
     // Store the estimated number of records in the flight, typically this is
     // returned from GetFlightInfo, but that could also come from the table itself.
-    int64_t estimated_records = -1;
+    int64_t estimated_records_ = -1;
+
+    AirportTakeFlightParameters take_flight_params_;
   };
 
   duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
