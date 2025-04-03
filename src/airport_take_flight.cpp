@@ -90,25 +90,34 @@ namespace duckdb
       idx_t &rowid_column_index)
   {
     rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
-    for (idx_t col_idx = 0;
-         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+
+    auto &config = DBConfig::GetConfig(context);
+
+    idx_t num_columns = static_cast<idx_t>(schema_root.arrow_schema.n_children);
+
+    if (num_columns > 0)
+    {
+      return_types.reserve(num_columns);
+      names.reserve(num_columns);
+    }
+
+    for (idx_t col_idx = 0; col_idx < num_columns; col_idx++)
     {
       auto &schema = *schema_root.arrow_schema.children[col_idx];
       if (!schema.release)
       {
         throw InvalidInputException("airport_take_flight: released schema passed");
       }
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
 
       // Determine if the column is the rowid column by looking at the metadata
       // on the column.
       bool is_rowid_column = false;
-      if (schema.metadata != nullptr)
+      if (schema.metadata)
       {
-        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
+        ArrowSchemaMetadata column_metadata(schema.metadata);
 
-        auto comment = column_metadata.GetOption("is_rowid");
-        if (!comment.empty())
+        if (!column_metadata.GetOption("is_rowid").empty())
         {
           is_rowid_column = true;
           rowid_column_index = col_idx;
@@ -117,28 +126,21 @@ namespace duckdb
 
       if (schema.dictionary)
       {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
+
+      idx_t column_id = is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx;
+
+      string column_name = schema.name && *schema.name ? schema.name : "v" + to_string(col_idx);
 
       if (!is_rowid_column)
       {
         return_types.emplace_back(arrow_type->GetDuckType());
+        names.push_back(std::move(column_name));
       }
 
-      arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
-
-      auto format = string(schema.format);
-      auto name = string(schema.name);
-      if (name.empty())
-      {
-        name = string("v") + to_string(col_idx);
-      }
-      if (!is_rowid_column)
-      {
-        names.push_back(name);
-      }
-      // printf("Added column with id %lld %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, name.c_str());
+      arrow_table.AddColumn(column_id, std::move(arrow_type));
     }
     QueryResult::DeduplicateColumns(names);
   }
@@ -182,13 +184,11 @@ namespace duckdb
     }
     else
     {
-
       std::unique_ptr<arrow::flight::FlightInfo> retrieved_flight_info;
       auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location());
 
       if (table_function_parameters != nullptr)
       {
-
         // Rather than calling GetFlightInfo we will call DoAction and get
         // get the flight info that way, since it allows us to serialize
         // all of the data we need to send instead of just the flight name.
@@ -258,7 +258,6 @@ namespace duckdb
     ret->estimated_records = estimated_records;
     ret->scan_data = std::move(scan_data);
     ret->take_flight_params = make_uniq<AirportTakeFlightParameters>(take_flight_params);
-
     ret->trace_id = trace_uuid;
     ret->table_function_parameters = table_function_parameters;
 
