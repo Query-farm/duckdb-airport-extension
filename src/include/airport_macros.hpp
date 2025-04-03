@@ -78,3 +78,12 @@
 
 #define AIRPORT_MSGPACK_UNPACK_CONTAINER(destination_type, destination_name, source, container, message) \
   AIRPORT_MSGPACK_UNPACK(destination_type, destination_name, source, container->server_location(), message);
+
+#define AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(result_name, action_name, parameters) \
+  msgpack::sbuffer parameters_packed_buffer;                                          \
+  msgpack::pack(parameters_packed_buffer, parameters);                                \
+  arrow::flight::Action result_name{                                                  \
+      action_name,                                                                    \
+      std::make_shared<arrow::Buffer>(                                                \
+          (uint8_t *)parameters_packed_buffer.data(),                                 \
+          parameters_packed_buffer.size())};

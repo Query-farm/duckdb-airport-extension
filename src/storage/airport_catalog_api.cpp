@@ -635,9 +635,8 @@ namespace duckdb
     auto flight_client = FlightClientForLocation(credentials->location());
 
     AirportSerializedCatalogSchemaRequest catalog_request = {catalog_name};
-    std::stringstream packed_buffer;
-    msgpack::pack(packed_buffer, catalog_request);
-    arrow::flight::Action action{"list_schemas", arrow::Buffer::FromString(packed_buffer.str())};
+
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "list_schemas", catalog_request);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
 

@@ -162,13 +162,10 @@ namespace duckdb
     }
     params.tags = info.tags;
 
-    std::stringstream packed_buffer;
-    msgpack::pack(packed_buffer, params);
-
     auto &server_location = airport_catalog.attach_parameters()->location();
 
-    arrow::flight::Action action{"create_schema",
-                                 arrow::Buffer::FromString(packed_buffer.str())};
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "create_schema", params);
+
     std::unique_ptr<arrow::flight::ResultStream> action_results;
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results,
                                             flight_client->DoAction(call_options, action),

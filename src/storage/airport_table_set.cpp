@@ -278,6 +278,27 @@ namespace duckdb
     throw NotImplementedException("AirportTableSet::GetTableInfo");
   }
 
+  struct AirportCreateTableParameters
+  {
+    std::string catalog_name;
+    std::string schema_name;
+    std::string table_name;
+
+    // The serialized Arrow schema for the table.
+    std::string arrow_schema;
+
+    // This will be "error", "ignore", or "replace"
+    std::string on_conflict;
+
+    // The list of constraint expressions.
+    std::vector<uint64_t> not_null_constraints;
+    std::vector<uint64_t> unique_constraints;
+    std::vector<std::string> check_constraints;
+
+    MSGPACK_DEFINE_MAP(catalog_name, schema_name, table_name, arrow_schema, on_conflict,
+                       not_null_constraints, unique_constraints, check_constraints)
+  };
+
   optional_ptr<CatalogEntry> AirportTableSet::CreateTable(ClientContext &context, BoundCreateTableInfo &info)
   {
     auto &airport_catalog = catalog.Cast<AirportCatalog>();
@@ -332,8 +353,49 @@ namespace duckdb
         server_location,
         "");
 
-    arrow::flight::Action action{"create_table",
-                                 serialized_schema};
+    // So we should change this to pass some proper messagepack data.
+
+    AirportCreateTableParameters params;
+    params.catalog_name = base.catalog;
+    params.schema_name = base.schema;
+    params.table_name = base.table;
+    params.arrow_schema = serialized_schema->ToString();
+    switch (info.base->on_conflict)
+    {
+    case OnCreateConflict::ERROR_ON_CONFLICT:
+      params.on_conflict = "error";
+      break;
+    case OnCreateConflict::IGNORE_ON_CONFLICT:
+      params.on_conflict = "ignore";
+      break;
+    case OnCreateConflict::REPLACE_ON_CONFLICT:
+      params.on_conflict = "replace";
+      break;
+    default:
+      throw NotImplementedException("Unimplemented conflict type");
+    }
+
+    for (auto &c : base.constraints)
+    {
+      if (c->type == ConstraintType::NOT_NULL)
+      {
+        auto not_null_constraint = (NotNullConstraint *)c.get();
+        params.not_null_constraints.push_back(not_null_constraint->index.index);
+      }
+      else if (c->type == ConstraintType::UNIQUE)
+      {
+        auto unique_constraint = (UniqueConstraint *)c.get();
+        params.unique_constraints.push_back(unique_constraint->index.index);
+      }
+      else if (c->type == ConstraintType::CHECK)
+      {
+        auto check_constraint = (CheckConstraint *)c.get();
+        params.check_constraints.push_back(check_constraint->expression->ToString());
+      }
+    }
+
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "create_table", params);
+
     std::unique_ptr<arrow::flight::ResultStream> action_results;
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_create_table");
 
@@ -352,8 +414,6 @@ namespace duckdb
     // We aren't interested in anything after the first result.
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 
-<<<<<<< HEAD
-=======
     // FIXME: need to extract the rowid type from the schema, I think there is function that does this.
 
     std::shared_ptr<arrow::Schema> info_schema;
@@ -364,7 +424,6 @@ namespace duckdb
                                                        flight_info->descriptor(),
                                                        "");
 
->>>>>>> a2cf95b (fix: cleanups)
     auto rowid_type = AirportAPI::GetRowIdType(
         context,
         info_schema,

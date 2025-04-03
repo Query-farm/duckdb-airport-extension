@@ -85,10 +85,7 @@ namespace duckdb
       throw NotImplementedException("AirportCatalogSet::DropEntry for type");
     }
 
-    std::stringstream packed_buffer;
-    msgpack::pack(packed_buffer, params);
-
-    arrow::flight::Action action{action_type, arrow::Buffer::FromString(packed_buffer.str())};
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, action_type, params);
 
     auto &server_location = airport_catalog.attach_parameters()->location();
 

@@ -159,6 +159,8 @@ namespace duckdb
 
       // Just fake a single column index.
       vector<column_t> column_ids = {0};
+
+      // So you need some endpoints here.
       scan_global_state = make_uniq<AirportArrowScanGlobalState>();
       scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr);
 

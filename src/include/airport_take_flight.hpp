@@ -11,8 +11,37 @@ namespace duckdb
 {
   struct AirportArrowScanGlobalState : public ArrowScanGlobalState
   {
-    vector<flight::FlightEndpoint> endpoints;
-    idx_t current_endpoint = 0;
+    // If there is a list of endpoints this constructor it used.
+    AirportArrowScanGlobalState(const vector<flight::FlightEndpoint> &endpoints)
+        : endpoints_(endpoints), current_endpoint_(0)
+    {
+      D_ASSERT(endpoints_.size() == 1);
+    }
+
+    // There are cases where a list of endpoints isn't available, for example
+    // the calls to DoExchange, so in that case don't set the endpoints.
+    AirportArrowScanGlobalState()
+        : current_endpoint_(0)
+    {
+    }
+
+    size_t total_endpoints() const
+    {
+      return endpoints_.size();
+    }
+
+    const std::optional<const flight::FlightEndpoint> GetNextEndpoint()
+    {
+      if (current_endpoint_ >= endpoints_.size())
+      {
+        return std::nullopt;
+      }
+      return endpoints_[current_endpoint_++];
+    }
+
+  private:
+    vector<flight::FlightEndpoint> endpoints_;
+    idx_t current_endpoint_ = 0;
   };
 
   unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(const ArrowScanFunctionData &function,

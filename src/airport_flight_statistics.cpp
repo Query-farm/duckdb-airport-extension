@@ -198,9 +198,7 @@ namespace duckdb
 
     auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
-    msgpack::pack(packed_buffer, params);
-    arrow::flight::Action action{"get_flight_column_statistics",
-                                 arrow::Buffer::FromString(packed_buffer.str())};
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_flight_column_statistics", params);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),

@@ -191,10 +191,8 @@ namespace duckdb
         // Rather than calling GetFlightInfo we will call DoAction and get
         // get the flight info that way, since it allows us to serialize
         // all of the data we need to send instead of just the flight name.
-        std::stringstream packed_buffer;
-        msgpack::pack(packed_buffer, table_function_parameters);
-        arrow::flight::Action action{"get_flight_info_table_function",
-                                     arrow::Buffer::FromString(packed_buffer.str())};
+
+        AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_flight_info_table_function", table_function_parameters);
 
         AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_get_flight_info_table_function");
 
@@ -423,22 +421,30 @@ namespace duckdb
     bind_data.json_filters = json_result;
   }
 
-  unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(const ArrowScanFunctionData &function,
-                                                              const vector<column_t> &column_ids, TableFilterSet *filters)
+  unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(
+      const ArrowScanFunctionData &function,
+      const vector<column_t> &column_ids,
+      TableFilterSet *filters)
   {
-    //! Generate Projection Pushdown Vector
     ArrowStreamParameters parameters;
-    for (idx_t idx = 0; idx < column_ids.size(); idx++)
+
+    auto &projected = parameters.projected_columns;
+    // Preallocate space for efficiency
+    projected.columns.reserve(column_ids.size());
+    projected.projection_map.reserve(column_ids.size());
+    projected.filter_to_col.reserve(column_ids.size());
+
+    for (const auto col_idx : column_ids)
     {
-      auto col_idx = column_ids[idx];
-      if (col_idx != COLUMN_IDENTIFIER_ROW_ID)
-      {
-        auto &schema = *function.schema_root.arrow_schema.children[col_idx];
-        parameters.projected_columns.projection_map[idx] = schema.name;
-        parameters.projected_columns.columns.emplace_back(schema.name);
-        parameters.projected_columns.filter_to_col[idx] = col_idx;
-      }
+      if (col_idx == COLUMN_IDENTIFIER_ROW_ID)
+        continue;
+
+      const auto &schema = *function.schema_root.arrow_schema.children[col_idx];
+      projected.projection_map.emplace(col_idx, schema.name);
+      projected.columns.emplace_back(schema.name);
+      projected.filter_to_col.emplace(col_idx, col_idx);
     }
+
     parameters.filters = filters;
 
     return function.scanner_producer(function.stream_factory_ptr, parameters);
@@ -526,10 +532,7 @@ namespace duckdb
     endpoints_request.parameters.json_filters = json_filters;
     endpoints_request.parameters.column_ids = column_ids;
 
-    std::stringstream packed_buffer;
-    msgpack::pack(packed_buffer, endpoints_request);
-    arrow::flight::Action action{"get_flight_endpoints",
-                                 arrow::Buffer::FromString(packed_buffer.str())};
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_flight_endpoints", endpoints_request);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),
@@ -548,13 +551,15 @@ namespace duckdb
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "get_flight_endpoints drain");
 
+    endpoints.reserve(serialized_endpoints.size());
+
     for (const auto &endpoint : serialized_endpoints)
     {
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto deserialized_endpoint,
                                               arrow::flight::FlightEndpoint::Deserialize(endpoint),
                                               server_location,
                                               "deserialize flight endpoint");
-      endpoints.push_back(deserialized_endpoint);
+      endpoints.push_back(std::move(deserialized_endpoint));
     }
     return endpoints;
   }
@@ -563,7 +568,6 @@ namespace duckdb
                                                                   TableFunctionInitInput &input)
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
-    auto result = make_uniq<AirportArrowScanGlobalState>();
 
     // Ideally this is where we call GetFlightInfo to obtain the endpoints, but
     // GetFlightInfo can't take the predicate information, so we'll need to call an
@@ -574,20 +578,24 @@ namespace duckdb
     //
     auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
 
-    result->endpoints = AirportGetFlightEndpoints(bind_data.take_flight_params(),
-                                                  bind_data.trace_id(),
-                                                  bind_data.descriptor(),
-                                                  flight_client,
-                                                  bind_data.json_filters,
-                                                  input.column_ids);
-
-    D_ASSERT(result->endpoints.size() == 1);
+    auto result = make_uniq<AirportArrowScanGlobalState>(
+        AirportGetFlightEndpoints(bind_data.take_flight_params(),
+                                  bind_data.trace_id(),
+                                  bind_data.descriptor(),
+                                  flight_client,
+                                  bind_data.json_filters,
+                                  input.column_ids));
 
     // Each endpoint can be processed on a different thread.
-    result->max_threads = result->endpoints.size();
+    result->max_threads = result->total_endpoints();
 
-    auto &first_endpoint = result->endpoints[0];
-    auto &first_location = first_endpoint.locations[0];
+    auto &first_endpoint_opt = result->GetNextEndpoint();
+    if (!first_endpoint_opt)
+    {
+      throw InvalidInputException("airport_take_flight: no endpoints returned from server");
+    }
+    auto &first_endpoint = *first_endpoint_opt;
+    auto &first_location = first_endpoint.locations.front();
 
     auto server_location = first_location.ToString();
     if (first_location != flight::Location::ReuseConnection())
