@@ -44,6 +44,7 @@ set(EXTENSION_SOURCES
   src/airport_optimizer.cpp
   src/airport_constraints.cpp
   src/airport_scalar_function.cpp
+  src/airport_flight_statistics.cpp
 )
 
 

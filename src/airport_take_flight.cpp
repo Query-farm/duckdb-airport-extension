@@ -22,6 +22,7 @@
 #include "msgpack.hpp"
 #include "duckdb/storage/statistics/numeric_stats.hpp"
 #include "storage/airport_catalog.hpp"
+#include "airport_flight_statistics.hpp"
 
 namespace duckdb
 {
@@ -380,263 +381,6 @@ namespace duckdb
     state.chunk_offset += output.size();
   }
 
-  struct GetFlightColumnStatistics
-  {
-    std::string flight_descriptor;
-    std::string column_name;
-    std::string type;
-
-    MSGPACK_DEFINE_MAP(flight_descriptor, column_name, type)
-  };
-
-  struct GetFlightColumnStatisticsNumericValue
-  {
-    bool boolean;
-    int8_t tinyint;
-    int16_t smallint;
-    int32_t integer;
-    int64_t bigint;
-    uint8_t utinyint;
-    uint16_t usmallint;
-    uint32_t uinteger;
-    uint64_t ubigint;
-
-    uint64_t hugeint_high;
-    uint64_t hugeint_low;
-
-    float float_;   // NOLINT
-    double double_; // NOLINT
-
-    MSGPACK_DEFINE_MAP(boolean, tinyint, smallint, integer, bigint, utinyint, usmallint, uinteger, ubigint,
-                       hugeint_high, hugeint_low,
-                       float_, double_)
-  };
-
-  Value GetValueForType(LogicalTypeId type, const GetFlightColumnStatisticsNumericValue &v)
-  {
-    switch (type)
-    {
-    case LogicalTypeId::BOOLEAN:
-      return Value::BOOLEAN(v.boolean);
-    case LogicalTypeId::TINYINT:
-      return Value::TINYINT(v.tinyint);
-    case LogicalTypeId::SMALLINT:
-      return Value::SMALLINT(v.smallint);
-    case LogicalTypeId::INTEGER:
-      return Value::INTEGER(v.integer);
-    case LogicalTypeId::BIGINT:
-      return Value::BIGINT(v.bigint);
-    case LogicalTypeId::UTINYINT:
-      return Value::UTINYINT(v.utinyint);
-    case LogicalTypeId::USMALLINT:
-      return Value::USMALLINT(v.usmallint);
-    case LogicalTypeId::UINTEGER:
-      return Value::UINTEGER(v.uinteger);
-    case LogicalTypeId::UBIGINT:
-      return Value::UBIGINT(v.ubigint);
-    case LogicalTypeId::TIMESTAMP_TZ:
-      return Value::TIMESTAMPTZ(timestamp_tz_t(v.bigint));
-    case LogicalTypeId::HUGEINT:
-    {
-      hugeint_t t = ((hugeint_t)v.hugeint_high << 64) | v.hugeint_low;
-      return Value::HUGEINT(t);
-    }
-    case LogicalTypeId::UHUGEINT:
-    {
-      uhugeint_t t = ((uhugeint_t)v.hugeint_high << 64) | v.hugeint_low;
-      return Value::UHUGEINT(t);
-    }
-    case LogicalTypeId::FLOAT:
-      return Value::FLOAT(v.float_);
-    case LogicalTypeId::DOUBLE:
-      return Value::DOUBLE(v.double_);
-    default:
-      throw InvalidInputException("Unknown type passed to GetValueForType");
-    }
-  }
-
-  struct GetFlightColumnStatisticsNumericStatsData
-  {
-    //! Whether or not the value has a max value
-    bool has_min;
-    //! Whether or not the segment has a min value
-    bool has_max;
-    //! The minimum value of the segment
-    GetFlightColumnStatisticsNumericValue min;
-    //! The maximum value of the segment
-    GetFlightColumnStatisticsNumericValue max;
-
-    MSGPACK_DEFINE_MAP(has_min, has_max, min, max)
-  };
-
-  struct GetFlightColumnStatisticsStringData
-  {
-    std::string min;
-    std::string max;
-    MSGPACK_DEFINE_MAP(min, max)
-  };
-
-  struct GetFlightColumnStatisticsResult
-  {
-    //! Whether or not the segment can contain NULL values
-    bool has_null;
-    //! Whether or not the segment can contain values that are not null
-    bool has_no_null;
-    // estimate that one may have even if distinct_stats==nullptr
-    idx_t distinct_count;
-
-    //! Numeric and String stats
-    GetFlightColumnStatisticsNumericStatsData numeric_stats;
-    GetFlightColumnStatisticsStringData string_stats;
-
-    MSGPACK_DEFINE_MAP(has_null, has_no_null, distinct_count, numeric_stats, string_stats)
-  };
-
-  static unique_ptr<BaseStatistics> take_flight_statistics(ClientContext &context, const FunctionData *bind_data, column_t column_index)
-  {
-    auto &data = bind_data->Cast<AirportTakeFlightBindData>();
-
-    // printf("Requesting statistics for column %llu\n", column_index);
-
-    if (column_index == COLUMN_IDENTIFIER_ROW_ID)
-    {
-      return make_uniq<BaseStatistics>(BaseStatistics::CreateEmpty(LogicalType::BIGINT));
-    }
-
-    // So we need to map the column id to the logical type.
-    auto &schema = data.schema_root.arrow_schema.children[column_index];
-
-    // printf("Column name is %s\n", schema->name);
-    auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema);
-    if (schema->dictionary)
-    {
-      auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema->dictionary);
-      arrow_type->SetDictionary(std::move(dictionary_type));
-    }
-    auto duck_type = arrow_type->GetDuckType();
-
-    // Talk to the server to get the statistics for the column.
-    // this will be done with a do_action call.
-    // if it fails just assume the server doesn't implement statistics.
-    if (!data.schema_root.arrow_schema.metadata)
-    {
-      // printf("No metadata attached to flight schema, so cannot produce stats\n");
-      return make_uniq<BaseStatistics>(BaseStatistics::CreateUnknown(duck_type));
-    }
-
-    auto metadata = ArrowSchemaMetadata(data.schema_root.arrow_schema.metadata);
-    auto stats = metadata.GetOption("can_produce_statistics");
-    if (stats.empty())
-    {
-      // printf("Cannot produce stats for this column\n");
-      return make_uniq<BaseStatistics>(BaseStatistics::CreateUnknown(duck_type));
-    }
-
-    // printf("Can produce statistics for this flight\n");
-
-    arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, *data.take_flight_params, data.trace_id);
-
-    std::stringstream packed_buffer;
-
-    auto &server_location = data.take_flight_params->server_location();
-
-    GetFlightColumnStatistics params;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
-        params.flight_descriptor,
-        data.scan_data->descriptor().SerializeToString(),
-        server_location,
-        "take_flight_statistics");
-    params.column_name = schema->name;
-    params.type = duck_type.ToString();
-
-    auto flight_client = AirportAPI::FlightClientForLocation(data.take_flight_params->server_location());
-
-    msgpack::pack(packed_buffer, params);
-    arrow::flight::Action action{"get_flight_column_statistics",
-                                 arrow::Buffer::FromString(packed_buffer.str())};
-
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "take_flight_statitics");
-
-    // The only item returned is a serialized flight info.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto stats_buffer,
-                                            action_results->Next(),
-                                            server_location,
-                                            "reading take_flight_statistics for a column");
-
-    std::string_view serialized_column_statistics(reinterpret_cast<const char *>(stats_buffer->body->data()), stats_buffer->body->size());
-
-    AIRPORT_MSGPACK_UNPACK(GetFlightColumnStatisticsResult,
-                           col_stats,
-                           (*(stats_buffer->body)),
-                           server_location,
-                           "File to parse msgpack encoded column statistics");
-
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(),
-                                     server_location,
-                                     "");
-
-    switch (duck_type.id())
-    {
-    case LogicalTypeId::VARCHAR:
-    {
-      auto result = StringStats::CreateEmpty(LogicalType(duck_type.id()));
-      if (col_stats.has_no_null)
-      {
-        result.SetHasNoNull();
-      }
-      if (col_stats.has_null)
-      {
-        result.SetHasNull();
-      }
-      result.SetDistinctCount(col_stats.distinct_count);
-      StringStats::Update(result, col_stats.string_stats.min);
-      StringStats::Update(result, col_stats.string_stats.max);
-      return result.ToUnique();
-    }
-    case LogicalTypeId::BOOLEAN:
-    case LogicalTypeId::TINYINT:
-    case LogicalTypeId::SMALLINT:
-    case LogicalTypeId::INTEGER:
-    case LogicalTypeId::BIGINT:
-    case LogicalTypeId::UTINYINT:
-    case LogicalTypeId::USMALLINT:
-    case LogicalTypeId::UINTEGER:
-    case LogicalTypeId::UBIGINT:
-    case LogicalTypeId::HUGEINT:
-    case LogicalTypeId::UHUGEINT:
-    case LogicalTypeId::FLOAT:
-    case LogicalTypeId::DOUBLE:
-    case LogicalTypeId::TIMESTAMP_TZ:
-    {
-      auto result = NumericStats::CreateEmpty(LogicalType(duck_type.id()));
-      if (col_stats.has_no_null)
-      {
-        result.SetHasNoNull();
-      }
-      if (col_stats.has_null)
-      {
-        result.SetHasNull();
-      }
-      result.SetDistinctCount(col_stats.distinct_count);
-      NumericStats::SetMin(result, GetValueForType(duck_type.id(), col_stats.numeric_stats.min));
-      NumericStats::SetMax(result, GetValueForType(duck_type.id(), col_stats.numeric_stats.max));
-      return result.ToUnique();
-    }
-    case LogicalTypeId::ARRAY:
-    case LogicalTypeId::LIST:
-    case LogicalTypeId::MAP:
-    case LogicalTypeId::STRUCT:
-      return make_uniq<BaseStatistics>(BaseStatistics::CreateUnknown(duck_type));
-
-    default:
-      throw NotImplementedException("Statistics for type %s not implemented", duck_type.ToString());
-    }
-  }
-
   static unique_ptr<NodeStatistics> take_flight_cardinality(ClientContext &context, const FunctionData *data)
   {
     // To estimate the cardinality of the flight, we can peek at the flight information
@@ -781,7 +525,7 @@ namespace duckdb
     MSGPACK_DEFINE_MAP(descriptor, parameters)
   };
 
-  static vector<flight::FlightEndpoint> GetFlightEndpoints(
+  static vector<flight::FlightEndpoint> AirportGetFlightEndpoints(
       const std::unique_ptr<AirportTakeFlightParameters> &take_flight_params,
       const string &trace_id,
       const flight::FlightDescriptor &descriptor,
@@ -854,12 +598,12 @@ namespace duckdb
     //
     auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params->server_location());
 
-    result->endpoints = GetFlightEndpoints(bind_data.take_flight_params,
-                                           bind_data.trace_id,
-                                           bind_data.scan_data->descriptor(),
-                                           flight_client,
-                                           bind_data.json_filters,
-                                           input.column_ids);
+    result->endpoints = AirportGetFlightEndpoints(bind_data.take_flight_params,
+                                                  bind_data.trace_id,
+                                                  bind_data.scan_data->descriptor(),
+                                                  flight_client,
+                                                  bind_data.json_filters,
+                                                  input.column_ids);
 
     D_ASSERT(result->endpoints.size() == 1);
 
@@ -912,8 +656,6 @@ namespace duckdb
   static double take_flight_scan_progress(ClientContext &, const FunctionData *data, const GlobalTableFunctionState *global_state)
   {
     auto &bind_data = data->Cast<AirportTakeFlightBindData>();
-    //    lock_guard<mutex> guard(bind_data.lock);
-
     // FIXME: this will have to be adapted for multiple endpoints
     return bind_data.scan_data->progress_ * 100.0;
   }
@@ -964,7 +706,7 @@ namespace duckdb
     take_flight_function_with_pointer.projection_pushdown = true;
     take_flight_function_with_pointer.filter_pushdown = false;
     take_flight_function_with_pointer.table_scan_progress = take_flight_scan_progress;
-    take_flight_function_with_pointer.statistics = take_flight_statistics;
+    take_flight_function_with_pointer.statistics = airport_take_flight_statistics;
 
     take_flight_function_set.AddFunction(take_flight_function_with_pointer);
 
