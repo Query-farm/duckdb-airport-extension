@@ -190,6 +190,11 @@ namespace duckdb
       return schema_;
     }
 
+    void examine_schema(
+        ClientContext &context,
+        vector<LogicalType> &return_types,
+        vector<string> &names);
+
   private:
     // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
     string trace_id_;

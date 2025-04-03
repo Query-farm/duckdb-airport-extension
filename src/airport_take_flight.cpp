@@ -81,16 +81,11 @@ namespace duckdb
     }
   }
 
-  static void AirportTakeFlightDetermineNamesAndTypes(
-      unique_ptr<AirportTakeFlightBindData> &bind_data,
+  void AirportTakeFlightBindData::examine_schema(
       ClientContext &context,
       vector<LogicalType> &return_types,
       vector<string> &names)
   {
-    auto &schema_root = bind_data->schema_root;
-    auto &arrow_table = bind_data->arrow_table;
-    auto &rowid_column_index = bind_data->rowid_column_index;
-
     rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
 
     auto &config = DBConfig::GetConfig(context);
@@ -162,6 +157,8 @@ namespace duckdb
     // Create a UID for tracing.
     const auto trace_uuid = airport_trace_id();
 
+    auto &server_location = take_flight_params.server_location();
+
     // The main thing that needs to be answered in this function
     // are the names and return types and establishing the bind data.
     //
@@ -187,7 +184,7 @@ namespace duckdb
     else
     {
       std::unique_ptr<arrow::flight::FlightInfo> retrieved_flight_info;
-      auto flight_client = AirportAPI::FlightClientForLocation(take_flight_params.server_location());
+      auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
       if (table_function_parameters != nullptr)
       {
@@ -199,23 +196,23 @@ namespace duckdb
         arrow::flight::Action action{"get_flight_info_table_function",
                                      arrow::Buffer::FromString(packed_buffer.str())};
 
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), take_flight_params.server_location(), "airport_get_flight_info_table_function");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_get_flight_info_table_function");
 
         // The only item returned is a serialized flight info.
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_flight_info_buffer, action_results->Next(), take_flight_params.server_location(), "reading get_flight_info for table function");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_flight_info_buffer, action_results->Next(), server_location, "reading get_flight_info for table function");
 
         std::string_view serialized_flight_info(reinterpret_cast<const char *>(serialized_flight_info_buffer->body->data()), serialized_flight_info_buffer->body->size());
 
         // Now deserialize that flight info so we can use it.
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(retrieved_flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), take_flight_params.server_location(), "deserialize flight info");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(retrieved_flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "deserialize flight info");
 
-        AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), take_flight_params.server_location(), "");
+        AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
       }
       else
       {
         AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(retrieved_flight_info,
                                                            flight_client->GetFlightInfo(call_options, descriptor),
-                                                           take_flight_params.server_location(),
+                                                           server_location,
                                                            descriptor,
                                                            "");
       }
@@ -231,28 +228,16 @@ namespace duckdb
       arrow::ipc::DictionaryMemo dictionary_memo;
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(schema,
                                                          retrieved_flight_info->GetSchema(&dictionary_memo),
-                                                         take_flight_params.server_location(),
+                                                         server_location,
                                                          descriptor,
                                                          "");
 
       scan_data = make_uniq<AirportTakeFlightScanData>(
-          AirportLocationDescriptor(take_flight_params.server_location(), descriptor),
+          AirportLocationDescriptor(server_location, descriptor),
           schema,
           nullptr);
     }
 
-    // Store the flight info on the bind data.
-
-    // After doing a little bit of examination of the DuckDb sources, I learned that
-    // that DuckDb supports the "C" interface of Arrow, this means that DuckDB doens't
-    // actually have a dependency on Arrow.
-    //
-    // Arrow Flight requires a dependency on the full Arrow library, because of all of
-    // the dependencies.
-    //
-    // Thankfully there is a "bridge" interface between the C++ based Arrow types returned
-    // by the C++ Arrow library and the C based Arrow types that DuckDB already knows how to
-    // consume.
     auto ret = make_uniq<AirportTakeFlightBindData>(
         (stream_factory_produce_t)&AirportCreateStream,
         (uintptr_t)scan_data.get(),
@@ -264,8 +249,7 @@ namespace duckdb
         descriptor,
         std::move(scan_data));
 
-    AirportTakeFlightDetermineNamesAndTypes(
-        ret,
+    ret->examine_schema(
         context,
         return_types,
         names);
@@ -579,7 +563,6 @@ namespace duckdb
                                                                   TableFunctionInitInput &input)
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
-    auto &scan_data = bind_data.scan_data();
     auto result = make_uniq<AirportArrowScanGlobalState>();
 
     // Ideally this is where we call GetFlightInfo to obtain the endpoints, but
@@ -589,7 +572,7 @@ namespace duckdb
     // FIXME: somehow the flight should be marked if it supports predicate pushdown.
     // right now I'm not sure what this is.
     //
-    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.take_flight_params().server_location());
+    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
 
     result->endpoints = AirportGetFlightEndpoints(bind_data.take_flight_params(),
                                                   bind_data.trace_id(),
@@ -619,7 +602,9 @@ namespace duckdb
     const auto &descriptor = bind_data.descriptor();
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_normal_headers(call_options, bind_data.take_flight_params(), bind_data.trace_id(),
+    airport_add_normal_headers(call_options,
+                               bind_data.take_flight_params(),
+                               bind_data.trace_id(),
                                descriptor);
 
     if (bind_data.skip_producing_result_for_update_or_delete)
@@ -639,7 +624,10 @@ namespace duckdb
         descriptor,
         "");
 
-    scan_data->setStream(std::move(stream));
+    // FIXME: make sure that the schema returned from the server is the same as
+    // what we were expecting.
+
+    bind_data.scan_data()->setStream(std::move(stream));
 
     result->stream = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get());
 
