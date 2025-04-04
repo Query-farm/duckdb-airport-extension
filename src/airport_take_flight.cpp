@@ -129,7 +129,7 @@ namespace duckdb
 
       const idx_t column_id = is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx;
 
-      const string column_name = schema.name && *schema.name ? schema.name : "v" + to_string(col_idx);
+      const string column_name = AirportNameForField(schema.name, col_idx);
 
       if (!is_rowid_column)
       {
