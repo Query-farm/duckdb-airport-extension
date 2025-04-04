@@ -23,6 +23,7 @@
 #include "duckdb/storage/statistics/numeric_stats.hpp"
 #include "storage/airport_catalog.hpp"
 #include "airport_flight_statistics.hpp"
+#include "airport_schema_utils.h"
 
 namespace duckdb
 {
@@ -79,67 +80,6 @@ namespace duckdb
     default:
       throw InvalidInputException("airport_take_flight: unknown descriptor type passed");
     }
-  }
-
-  void AirportTakeFlightBindData::examine_schema(
-      ClientContext &context,
-      vector<LogicalType> &return_types,
-      vector<string> &names)
-  {
-    rowid_column_index = COLUMN_IDENTIFIER_ROW_ID;
-
-    auto &config = DBConfig::GetConfig(context);
-
-    const idx_t num_columns = static_cast<idx_t>(schema_root.arrow_schema.n_children);
-
-    if (num_columns > 0)
-    {
-      return_types.reserve(num_columns);
-      names.reserve(num_columns);
-    }
-
-    for (idx_t col_idx = 0; col_idx < num_columns; col_idx++)
-    {
-      auto &schema = *schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
-      {
-        throw InvalidInputException("airport_take_flight: released schema passed");
-      }
-      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
-
-      // Determine if the column is the rowid column by looking at the metadata
-      // on the column.
-      bool is_rowid_column = false;
-      if (schema.metadata)
-      {
-        ArrowSchemaMetadata column_metadata(schema.metadata);
-
-        if (!column_metadata.GetOption("is_rowid").empty())
-        {
-          is_rowid_column = true;
-          rowid_column_index = col_idx;
-        }
-      }
-
-      if (schema.dictionary)
-      {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
-        arrow_type->SetDictionary(std::move(dictionary_type));
-      }
-
-      const idx_t column_id = is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx;
-
-      const string column_name = AirportNameForField(schema.name, col_idx);
-
-      if (!is_rowid_column)
-      {
-        return_types.emplace_back(arrow_type->GetDuckType());
-        names.push_back(std::move(column_name));
-      }
-
-      arrow_table.AddColumn(column_id, std::move(arrow_type));
-    }
-    QueryResult::DeduplicateColumns(names);
   }
 
   unique_ptr<FunctionData>
@@ -248,10 +188,14 @@ namespace duckdb
         descriptor,
         std::move(scan_data));
 
-    ret->examine_schema(
-        context,
-        return_types,
-        names);
+    AirportExamineSchema(context,
+                         ret->schema_root,
+                         &ret->arrow_table,
+                         &return_types,
+                         &names,
+                         nullptr,
+                         &ret->rowid_column_index,
+                         true);
 
     return std::move(ret);
   }

@@ -14,6 +14,7 @@
 #include "storage/airport_exchange.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "airport_location_descriptor.hpp"
+#include "airport_schema_utils.h"
 #include <numeric>
 
 namespace duckdb
@@ -104,55 +105,17 @@ namespace duckdb
           this,
           "ExportSchema");
 
-      vector<string> reading_arrow_column_names;
-      vector<string> arrow_types;
+      AirportExamineSchema(context,
+                           scan_bind_data_->schema_root,
+                           &scan_bind_data_->arrow_table,
+                           &scan_bind_data_->return_types,
+                           &scan_bind_data_->names,
+                           nullptr,
+                           nullptr,
+                           false);
 
-      auto &schema_root = scan_bind_data_->schema_root;
-      for (idx_t col_idx = 0;
-           col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
-      {
-        auto &schema = *schema_root.arrow_schema.children[col_idx];
-        if (!schema.release)
-        {
-          throw InvalidInputException("airport_scalar_function: released schema passed");
-        }
-        auto name = AirportNameForField(schema.name, col_idx);
-
-        reading_arrow_column_names.push_back(name);
-
-        auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
-        arrow_types.push_back(arrow_type->GetDuckType().ToString());
-      }
-
-      // There should only be one column returned, since this is a call
-      // to a scalar function.
-      D_ASSERT(reading_arrow_column_names.size() == 1);
-      D_ASSERT(arrow_types.size() == 1);
-
-      for (idx_t col_idx = 0;
-           col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
-      {
-        auto &schema = *schema_root.arrow_schema.children[col_idx];
-        if (!schema.release)
-        {
-          throw InvalidInputException("airport_scalar_function: released schema passed");
-        }
-        auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
-
-        if (schema.dictionary)
-        {
-          auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
-          arrow_type->SetDictionary(std::move(dictionary_type));
-        }
-        scan_bind_data_->return_types.emplace_back(arrow_type->GetDuckType());
-
-        scan_bind_data_->arrow_table.AddColumn(col_idx, std::move(arrow_type));
-
-        auto format = string(schema.format);
-
-        auto name = to_string(col_idx);
-        scan_bind_data_->names.push_back(name);
-      }
+      // There should only be a single output column.
+      D_ASSERT(scan_bind_data_->names.size() == 1);
 
       writer_ = std::move(exchange_result.writer);
 
