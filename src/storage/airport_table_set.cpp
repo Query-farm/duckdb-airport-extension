@@ -39,6 +39,7 @@
 #include "storage/airport_schema_entry.hpp"
 #include "storage/airport_table_set.hpp"
 #include "storage/airport_transaction.hpp"
+#include "airport_schema_utils.h"
 
 struct FunctionCatalogSchemaName
 {
@@ -1005,73 +1006,18 @@ namespace duckdb
         flight_descriptor,
         "ExportSchema");
 
-    vector<string> reading_arrow_column_names;
-    for (idx_t col_idx = 0;
-         col_idx < (idx_t)data.schema_root.arrow_schema.n_children; col_idx++)
-    {
-      auto &schema = *data.schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
-      {
-        throw InvalidInputException("airport_exchange: released schema passed");
-      }
-      auto name = AirportNameForField(schema.name, col_idx);
-
-      reading_arrow_column_names.push_back(name);
-    }
-
     // printf("Arrow schema column names are: %s\n", join_vector_of_strings(reading_arrow_column_names, ',').c_str());
     // printf("Expected order of columns to be: %s\n", join_vector_of_strings(destination_chunk_column_names, ',').c_str());
 
-    vector<string> arrow_types;
-    for (idx_t col_idx = 0;
-         col_idx < (idx_t)data.schema_root.arrow_schema.n_children; col_idx++)
-    {
-      auto &schema = *data.schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
-      {
-        throw InvalidInputException("airport_exchange: released schema passed");
-      }
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
-      arrow_types.push_back(arrow_type->GetDuckType().ToString());
-
-      // Determine if the column is the rowid column by looking at the metadata
-      // on the column.
-      bool is_rowid_column = false;
-      if (schema.metadata != nullptr)
-      {
-        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
-
-        auto comment = column_metadata.GetOption("is_rowid");
-        if (!comment.empty())
-        {
-          is_rowid_column = true;
-          scan_bind_data->rowid_column_index = col_idx;
-        }
-      }
-
-      if (schema.dictionary)
-      {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
-        arrow_type->SetDictionary(std::move(dictionary_type));
-      }
-
-      if (!is_rowid_column)
-      {
-        scan_bind_data->return_types.emplace_back(arrow_type->GetDuckType());
-      }
-
-      // printf("Setting arrow column index %llu to data %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, arrow_type->GetDuckType().ToString().c_str());
-      scan_bind_data->arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
-
-      auto format = string(schema.format);
-
-      auto name = AirportNameForField(schema.name, col_idx);
-
-      if (!is_rowid_column)
-      {
-        scan_bind_data->names.push_back(name);
-      }
-    }
+    AirportExamineSchema(
+        context,
+        data.schema_root,
+        &data.arrow_table,
+        &scan_bind_data->return_types,
+        &scan_bind_data->names,
+        nullptr,
+        &scan_bind_data->rowid_column_index,
+        true);
 
     // There shouldn't be any projection ids.
     vector<idx_t> projection_ids;
