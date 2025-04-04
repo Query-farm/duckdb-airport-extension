@@ -79,16 +79,17 @@ namespace duckdb
           function_output_schema_,
           std::move(exchange_result.reader));
 
-      scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
+      scan_bind_data_ = make_uniq<AirportExchangeTakeFlightBindData>(
           (stream_factory_produce_t)&AirportCreateStream,
           (uintptr_t)scan_data.get());
 
-      scan_bind_data->scan_data = std::move(scan_data);
+      scan_bind_data_->scan_data = std::move(scan_data);
 
       // Read the schema for the results being returned.
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                               scan_bind_data->scan_data->stream()->GetSchema(),
-                                               this, "");
+                                               scan_bind_data_->scan_data->stream()->GetSchema(),
+                                               this,
+                                               "");
 
       // Ensure that the schema of the response matches the one that was
       // returned on the flight info object.
@@ -97,28 +98,25 @@ namespace duckdb
                                   "Schema equality check");
 
       // Convert the Arrow schema to the C format schema.
-      auto &data = *scan_bind_data;
+      //      auto &data = *scan_bind_data_;
       AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-          ExportSchema(*read_schema, &data.schema_root.arrow_schema),
+          ExportSchema(*read_schema, &scan_bind_data_->schema_root.arrow_schema),
           this,
           "ExportSchema");
 
       vector<string> reading_arrow_column_names;
       vector<string> arrow_types;
 
+      auto &schema_root = scan_bind_data_->schema_root;
       for (idx_t col_idx = 0;
-           col_idx < (idx_t)data.schema_root.arrow_schema.n_children; col_idx++)
+           col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
       {
-        auto &schema = *data.schema_root.arrow_schema.children[col_idx];
+        auto &schema = *schema_root.arrow_schema.children[col_idx];
         if (!schema.release)
         {
           throw InvalidInputException("airport_scalar_function: released schema passed");
         }
-        auto name = string(schema.name);
-        if (name.empty())
-        {
-          name = string("v") + to_string(col_idx);
-        }
+        auto name = AirportNameForField(schema.name, col_idx);
 
         reading_arrow_column_names.push_back(name);
 
@@ -132,9 +130,9 @@ namespace duckdb
       D_ASSERT(arrow_types.size() == 1);
 
       for (idx_t col_idx = 0;
-           col_idx < (idx_t)data.schema_root.arrow_schema.n_children; col_idx++)
+           col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
       {
-        auto &schema = *data.schema_root.arrow_schema.children[col_idx];
+        auto &schema = *schema_root.arrow_schema.children[col_idx];
         if (!schema.release)
         {
           throw InvalidInputException("airport_scalar_function: released schema passed");
@@ -146,38 +144,38 @@ namespace duckdb
           auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
           arrow_type->SetDictionary(std::move(dictionary_type));
         }
-        scan_bind_data->return_types.emplace_back(arrow_type->GetDuckType());
+        scan_bind_data_->return_types.emplace_back(arrow_type->GetDuckType());
 
-        scan_bind_data->arrow_table.AddColumn(col_idx, std::move(arrow_type));
+        scan_bind_data_->arrow_table.AddColumn(col_idx, std::move(arrow_type));
 
         auto format = string(schema.format);
 
         auto name = to_string(col_idx);
-        scan_bind_data->names.push_back(name);
+        scan_bind_data_->names.push_back(name);
       }
 
-      writer = std::move(exchange_result.writer);
+      writer_ = std::move(exchange_result.writer);
 
       // Just fake a single column index.
       vector<column_t> column_ids = {0};
 
       // So you need some endpoints here.
-      scan_global_state = make_uniq<AirportArrowScanGlobalState>();
-      scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr);
+      scan_global_state_ = make_uniq<AirportArrowScanGlobalState>();
+      scan_global_state_->stream = AirportProduceArrowScan(scan_bind_data_->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr);
 
       // There shouldn't be any projection ids.
       vector<idx_t> projection_ids;
 
       auto fake_init_input = TableFunctionInitInput(
-          &scan_bind_data->Cast<FunctionData>(),
+          &scan_bind_data_->Cast<FunctionData>(),
           column_ids,
           projection_ids,
           nullptr);
 
       auto current_chunk = make_uniq<ArrowArrayWrapper>();
-      scan_local_state = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
-      scan_local_state->column_ids = fake_init_input.column_ids;
-      scan_local_state->filters = fake_init_input.filters.get();
+      scan_local_state_ = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
+      scan_local_state_->column_ids = fake_init_input.column_ids;
+      scan_local_state_->filters = fake_init_input.filters.get();
     }
 
   public:
@@ -191,16 +189,17 @@ namespace duckdb
       return function_output_schema_;
     }
 
-    std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data;
-    std::unique_ptr<AirportArrowScanGlobalState> scan_global_state;
-    std::unique_ptr<ArrowArrayStreamWrapper> reader;
-    std::unique_ptr<ArrowScanLocalState> scan_local_state;
-    std::unique_ptr<arrow::flight::FlightStreamWriter> writer;
+    void process_chunk(DataChunk &args, ExpressionState &state, Vector &result);
 
   private:
+    std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data_;
+    std::unique_ptr<AirportArrowScanGlobalState> scan_global_state_;
+    std::unique_ptr<ArrowScanLocalState> scan_local_state_;
+    std::unique_ptr<arrow::flight::FlightStreamWriter> writer_;
+
     const std::shared_ptr<arrow::Schema> function_output_schema_;
     const std::shared_ptr<arrow::Schema> function_input_schema_;
-    const unique_ptr<arrow::flight::FlightClient> flight_client;
+    const unique_ptr<arrow::flight::FlightClient> flight_client_;
   };
 
   struct AirportScalarFunctionBindData : public FunctionData
@@ -313,47 +312,53 @@ namespace duckdb
   void AirportScalarFunctionProcessChunk(DataChunk &args, ExpressionState &state, Vector &result)
   {
     auto &lstate = ExecuteFunctionState::GetFunctionState(state)->Cast<AirportScalarFunctionLocalState>();
+    lstate.process_chunk(args, state, result);
+  }
+
+  void AirportScalarFunctionLocalState::process_chunk(DataChunk &args, ExpressionState &state, Vector &result)
+  {
     auto &context = state.GetContext();
 
     // So the send schema can contain ANY fields, if it does, we want to dynamically create the schema from
     // what was supplied.
 
-    auto appender = make_uniq<ArrowAppender>(args.GetTypes(), args.size(), context.GetClientProperties(),
+    auto appender = make_uniq<ArrowAppender>(args.GetTypes(),
+                                             args.size(),
+                                             context.GetClientProperties(),
                                              ArrowTypeExtensionData::GetExtensionTypes(context, args.GetTypes()));
 
     // Now that we have the appender append some data.
     appender->Append(args, 0, args.size(), args.size());
     ArrowArray arr = appender->Finalize();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    // Copy from the Appender into the RecordBatch.
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
-        arrow::ImportRecordBatch(&arr, lstate.function_input_schema()),
-        lstate.server_location(),
-        lstate.descriptor(), "");
+        arrow::ImportRecordBatch(&arr, function_input_schema_),
+        this, "");
 
     // Now send that record batch to the remove server.
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
-        lstate.writer->WriteRecordBatch(*record_batch),
-        lstate.server_location(),
-        lstate.descriptor(), "");
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
+        writer_->WriteRecordBatch(*record_batch),
+        this, "");
 
-    lstate.scan_local_state->Reset();
+    scan_local_state_->Reset();
 
-    auto current_chunk = lstate.scan_global_state->stream->GetNextChunk();
-    lstate.scan_local_state->chunk = std::move(current_chunk);
+    auto current_chunk = scan_global_state_->stream->GetNextChunk();
+    scan_local_state_->chunk = std::move(current_chunk);
 
     auto output_size =
-        MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(lstate.scan_local_state->chunk->arrow_array.length) - lstate.scan_local_state->chunk_offset);
+        MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(scan_local_state_->chunk->arrow_array.length) - scan_local_state_->chunk_offset);
 
     DataChunk returning_data_chunk;
     returning_data_chunk.Initialize(Allocator::Get(context),
-                                    lstate.scan_bind_data->return_types,
+                                    scan_bind_data_->return_types,
                                     output_size);
 
     returning_data_chunk.SetCardinality(output_size);
 
-    ArrowTableFunction::ArrowToDuckDB(*(lstate.scan_local_state.get()),
-                                      lstate.scan_bind_data->arrow_table.GetColumns(),
+    ArrowTableFunction::ArrowToDuckDB(*(scan_local_state_.get()),
+                                      scan_bind_data_->arrow_table.GetColumns(),
                                       returning_data_chunk,
                                       0,
                                       false);

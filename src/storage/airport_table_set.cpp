@@ -177,11 +177,7 @@ namespace duckdb
           }
         }
 
-        auto column_name = string(column.name);
-        if (column_name.empty())
-        {
-          column_name = string("v") + to_string(col_idx);
-        }
+        auto column_name = AirportNameForField(column.name, col_idx);
 
         column_names.emplace_back(column_name);
 
@@ -663,11 +659,7 @@ namespace duckdb
       {
         throw InvalidInputException("airport_dynamic_table_bind: released schema passed");
       }
-      auto name = string(schema.name);
-      if (name.empty())
-      {
-        name = string("v") + to_string(col_idx);
-      }
+      auto name = AirportNameForField(schema.name, col_idx);
 
       // If we have a table input skip over it.
       if (schema.metadata != nullptr)
@@ -1019,11 +1011,7 @@ namespace duckdb
       {
         throw InvalidInputException("airport_exchange: released schema passed");
       }
-      auto name = string(schema.name);
-      if (name.empty())
-      {
-        name = string("v") + to_string(col_idx);
-      }
+      auto name = AirportNameForField(schema.name, col_idx);
 
       reading_arrow_column_names.push_back(name);
     }
@@ -1069,16 +1057,12 @@ namespace duckdb
         scan_bind_data->return_types.emplace_back(arrow_type->GetDuckType());
       }
 
-      auto name = string(schema.name);
-
       // printf("Setting arrow column index %llu to data %s\n", is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, arrow_type->GetDuckType().ToString().c_str());
       scan_bind_data->arrow_table.AddColumn(is_rowid_column ? COLUMN_IDENTIFIER_ROW_ID : col_idx, std::move(arrow_type));
 
       auto format = string(schema.format);
-      if (name.empty())
-      {
-        name = string("v") + to_string(col_idx);
-      }
+
+      auto name = AirportNameForField(schema.name, col_idx);
 
       if (!is_rowid_column)
       {

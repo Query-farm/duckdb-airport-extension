@@ -702,4 +702,14 @@ namespace duckdb
 
     ExtensionUtil::RegisterFunction(instance, take_flight_function_set);
   }
+
+  std::string AirportNameForField(const string &name, idx_t col_idx)
+  {
+    if (name.empty())
+    {
+      return string("v") + to_string(col_idx);
+    }
+    return name;
+  }
+
 }

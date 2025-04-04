@@ -61,4 +61,5 @@ namespace duckdb
       std::shared_ptr<arrow::Schema> schema,
       const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters);
 
+  std::string AirportNameForField(const string &name, const idx_t col_idx);
 }
