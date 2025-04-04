@@ -152,11 +152,13 @@ namespace duckdb
     // So we need to map the column id to the logical type.
     auto &schema = data.schema_root.arrow_schema.children[column_index];
 
+    auto &config = DBConfig::GetConfig(context);
+
     // printf("Column name is %s\n", schema->name);
-    auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema);
+    auto arrow_type = ArrowType::GetArrowLogicalType(config, *schema);
     if (schema->dictionary)
     {
-      auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema->dictionary);
+      auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema->dictionary);
       arrow_type->SetDictionary(std::move(dictionary_type));
     }
     auto duck_type = arrow_type->GetDuckType();

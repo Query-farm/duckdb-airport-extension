@@ -216,6 +216,8 @@ namespace duckdb
         (&info),
         "ExportSchema");
 
+    auto &config = DBConfig::GetConfig(context);
+
     for (idx_t col_idx = 0;
          col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
     {
@@ -225,12 +227,11 @@ namespace duckdb
         throw InvalidInputException("AirportSchemaToLogicalTypes: released schema passed");
       }
       send_names.push_back(string(schema.name));
-
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
 
       if (schema.dictionary)
       {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 

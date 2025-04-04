@@ -106,6 +106,8 @@ namespace duckdb
         airport_catalog.attach_parameters());
     connection_pool_.release(curl);
 
+    auto &config = DBConfig::GetConfig(context);
+
     for (auto &table : contents->tables)
     {
       // D_ASSERT(schema.name == table.schema_name);
@@ -170,7 +172,7 @@ namespace duckdb
           auto is_rowid = column_metadata.GetOption("is_rowid");
           if (!is_rowid.empty())
           {
-            rowid_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), column)->GetDuckType();
+            rowid_type = ArrowType::GetArrowLogicalType(config, column)->GetDuckType();
 
             // So the skipping here is a problem, since its assumed
             // that the return_type and column_names can be easily indexed.
@@ -182,10 +184,10 @@ namespace duckdb
 
         column_names.emplace_back(column_name);
 
-        auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), column);
+        auto arrow_type = ArrowType::GetArrowLogicalType(config, column);
         if (column.dictionary)
         {
-          auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *column.dictionary);
+          auto dictionary_type = ArrowType::GetArrowLogicalType(config, *column.dictionary);
           return_types.emplace_back(dictionary_type->GetDuckType());
         }
         else
@@ -486,20 +488,25 @@ namespace duckdb
         "ExportSchema");
 
     vector<LogicalType> return_types;
+    auto &config = DBConfig::GetConfig(context);
+
+    const idx_t column_count = (idx_t)schema_root.arrow_schema.n_children;
+
+    return_types.reserve(column_count);
 
     for (idx_t col_idx = 0;
-         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+         col_idx < column_count; col_idx++)
     {
       auto &schema = *schema_root.arrow_schema.children[col_idx];
       if (!schema.release)
       {
         throw InvalidInputException("AirportSchemaToLogicalTypes: released schema passed");
       }
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
 
       if (schema.dictionary)
       {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 
@@ -858,6 +865,7 @@ namespace duckdb
         "ExportSchema");
 
     ArrowSchemaTableFunctionTypes result;
+    auto &config = DBConfig::GetConfig(context);
 
     for (idx_t col_idx = 0;
          col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
@@ -867,11 +875,11 @@ namespace duckdb
       {
         throw InvalidInputException("AirportSchemaToLogicalTypes: released schema passed");
       }
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
 
       if (schema.dictionary)
       {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), *schema.dictionary);
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 

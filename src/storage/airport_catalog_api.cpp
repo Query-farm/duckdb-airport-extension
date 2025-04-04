@@ -598,6 +598,7 @@ namespace duckdb
                                                 location,
                                                 descriptor,
                                                 "ExportSchema");
+    auto &config = DBConfig::GetConfig(context);
 
     for (idx_t col_idx = 0;
          col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
@@ -614,7 +615,7 @@ namespace duckdb
         auto comment = column_metadata.GetOption("is_rowid");
         if (!comment.empty())
         {
-          auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+          auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
           return arrow_type->GetDuckType();
         }
       }
