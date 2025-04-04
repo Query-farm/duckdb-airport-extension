@@ -80,9 +80,10 @@ namespace duckdb
 
       if (!skip_rowid_column || !is_rowid_column)
       {
+        auto duck_type = arrow_type->GetDuckType();
         if (return_types)
         {
-          return_types->emplace_back(arrow_type->GetDuckType());
+          return_types->push_back(duck_type);
         }
         if (names)
         {
@@ -90,7 +91,7 @@ namespace duckdb
         }
         if (duckdb_type_names)
         {
-          duckdb_type_names->push_back(arrow_type->GetDuckType().ToString());
+          duckdb_type_names->push_back(duck_type.ToString());
         }
       }
 

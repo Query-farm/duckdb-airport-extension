@@ -636,23 +636,28 @@ namespace duckdb
   static std::shared_ptr<arrow::Buffer> AirportDynamicSerializeParameters(std::shared_ptr<arrow::Schema> input_schema,
                                                                           ClientContext &context,
                                                                           TableFunctionBindInput &input,
-                                                                          string server_location,
-                                                                          arrow::flight::FlightDescriptor flight_descriptor)
+                                                                          const AirportLocationDescriptor &location_descriptor)
   {
     ArrowSchemaWrapper schema_root;
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         ExportSchema(*input_schema, &schema_root.arrow_schema),
-        server_location,
-        flight_descriptor,
-        "ExportSchema");
+        &location_descriptor, "ExportSchema");
 
     vector<string> input_schema_names;
     vector<LogicalType> input_schema_types;
     vector<idx_t> source_indexes;
 
+    const auto column_count = (idx_t)schema_root.arrow_schema.n_children;
+
+    input_schema_names.reserve(column_count);
+    input_schema_types.reserve(column_count);
+    source_indexes.reserve(column_count);
+
+    auto &config = DBConfig::GetConfig(context);
+
     for (idx_t col_idx = 0;
-         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+         col_idx < column_count; col_idx++)
     {
       auto &schema = *schema_root.arrow_schema.children[col_idx];
       if (!schema.release)
@@ -674,7 +679,7 @@ namespace duckdb
         }
       }
       input_schema_names.push_back(name);
-      auto arrow_type = ArrowType::GetArrowLogicalType(DBConfig::GetConfig(context), schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
       input_schema_types.push_back(arrow_type->GetDuckType());
       // Where does this field come from.
       source_indexes.push_back(col_idx);
@@ -695,7 +700,7 @@ namespace duckdb
     // Now how do we populate the input_chunk with the input data?
     int seen_named_parameters = 0;
     for (idx_t col_idx = 0;
-         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+         col_idx < column_count; col_idx++)
     {
       auto &schema = *schema_root.arrow_schema.children[col_idx];
       if (!schema.release)
@@ -732,34 +737,33 @@ namespace duckdb
 
     auto schema_without_table_fields = AirportSchemaWithoutTableFields(input_schema);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, schema_without_table_fields),
-        server_location,
-        flight_descriptor, "");
+        &location_descriptor, "");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto buffer_output_stream,
-                                            arrow::io::BufferOutputStream::Create(),
-                                            server_location,
-                                            "create buffer output stream");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto buffer_output_stream,
+                                             arrow::io::BufferOutputStream::Create(),
+                                             &location_descriptor,
+                                             "create buffer output stream");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto writer,
-                                            arrow::ipc::MakeStreamWriter(buffer_output_stream, schema_without_table_fields),
-                                            server_location,
-                                            "make stream writer");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto writer,
+                                             arrow::ipc::MakeStreamWriter(buffer_output_stream, schema_without_table_fields),
+                                             &location_descriptor,
+                                             "make stream writer");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(writer->WriteRecordBatch(*record_batch),
-                                     server_location,
-                                     "write record batch");
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(writer->WriteRecordBatch(*record_batch),
+                                      &location_descriptor,
+                                      "write record batch");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(writer->Close(),
-                                     server_location,
-                                     "close record batch writer");
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(writer->Close(),
+                                      &location_descriptor,
+                                      "close record batch writer");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto buffer,
         buffer_output_stream->Finish(),
-        server_location,
+        &location_descriptor,
         "finish buffer output stream");
 
     return buffer;
@@ -776,8 +780,7 @@ namespace duckdb
     auto buffer = AirportDynamicSerializeParameters(function_info.function->input_schema(),
                                                     context,
                                                     input,
-                                                    function_info.function->location(),
-                                                    function_info.function->descriptor());
+                                                    *function_info.function);
 
     // So save the buffer so we can send it to the server to determine
     // the schema of the flight.
