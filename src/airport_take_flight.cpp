@@ -253,6 +253,32 @@ namespace duckdb
         std::nullopt);
   }
 
+  static bool AirportArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,
+                                                ArrowScanLocalState &state, AirportArrowScanGlobalState &parallel_state)
+  {
+    lock_guard<mutex> parallel_lock(parallel_state.main_mutex);
+    if (parallel_state.done)
+    {
+      return false;
+    }
+    state.Reset();
+    state.batch_index = ++parallel_state.batch_index;
+
+    auto current_chunk = parallel_state.stream->GetNextChunk();
+    while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release)
+    {
+      current_chunk = parallel_state.stream->GetNextChunk();
+    }
+    state.chunk = std::move(current_chunk);
+    //! have we run out of chunks? we are done
+    if (!state.chunk->arrow_array.release)
+    {
+      parallel_state.done = true;
+      return false;
+    }
+    return true;
+  }
+
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)
   {
     if (!data_p.local_state)
@@ -266,7 +292,7 @@ namespace duckdb
     //! Out of tuples in this chunk
     if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length)
     {
-      if (!ArrowTableFunction::ArrowScanParallelStateNext(
+      if (!AirportArrowScanParallelStateNext(
               context,
               &airport_bind_data,
               state,
@@ -287,7 +313,7 @@ namespace duckdb
       state.all_columns.SetCardinality(output_size);
       ArrowTableFunction::ArrowToDuckDB(state, airport_bind_data.arrow_table.GetColumns(), state.all_columns,
                                         airport_bind_data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
-      output.ReferenceColumns(state.all_columns, global_state.projection_ids);
+      output.ReferenceColumns(state.all_columns, global_state.projection_ids());
     }
     else
     {
@@ -456,7 +482,7 @@ namespace duckdb
       const AirportTakeFlightParameters &take_flight_params,
       const string &trace_id,
       const flight::FlightDescriptor &descriptor,
-      std::shared_ptr<flight::FlightClient> flight_client,
+      const std::shared_ptr<flight::FlightClient> &flight_client,
       const std::string &json_filters,
       const vector<idx_t> &column_ids)
   {
@@ -523,16 +549,38 @@ namespace duckdb
     //
     auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
 
+    vector<idx_t> projection_ids;
+    vector<LogicalType> scanned_types;
+
+    if (!input.projection_ids.empty())
+    {
+      projection_ids = input.projection_ids;
+      for (const auto &col_idx : input.column_ids)
+      {
+        if (col_idx == COLUMN_IDENTIFIER_ROW_ID)
+        {
+          auto rowid_type = AirportAPI::GetRowIdType(
+              context,
+              bind_data.schema(),
+              bind_data.server_location(),
+              bind_data.descriptor());
+          scanned_types.emplace_back(rowid_type);
+        }
+        else
+        {
+          scanned_types.push_back(bind_data.all_types[col_idx]);
+        }
+      }
+    }
+
     auto result = make_uniq<AirportArrowScanGlobalState>(
         AirportGetFlightEndpoints(bind_data.take_flight_params(),
                                   bind_data.trace_id(),
                                   bind_data.descriptor(),
                                   flight_client,
                                   bind_data.json_filters,
-                                  input.column_ids));
-
-    // Each endpoint can be processed on a different thread.
-    result->max_threads = result->total_endpoints();
+                                  input.column_ids),
+        projection_ids, scanned_types);
 
     auto &first_endpoint_opt = result->GetNextEndpoint();
     if (!first_endpoint_opt)
@@ -594,6 +642,39 @@ namespace duckdb
     return bind_data.scan_data()->progress_ * 100.0;
   }
 
+  static unique_ptr<LocalTableFunctionState>
+  AirportArrowScanInitLocalInternal(ClientContext &context, TableFunctionInitInput &input,
+                                    GlobalTableFunctionState *global_state_p)
+  {
+    auto &global_state = global_state_p->Cast<AirportArrowScanGlobalState>();
+    auto current_chunk = make_uniq<ArrowArrayWrapper>();
+    auto result = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
+    result->column_ids = input.column_ids;
+    result->filters = input.filters.get();
+    auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
+    if (!bind_data.projection_pushdown_enabled)
+    {
+      result->column_ids.clear();
+    }
+    else if (!input.projection_ids.empty())
+    {
+      auto &asgs = global_state_p->Cast<AirportArrowScanGlobalState>();
+      result->all_columns.Initialize(context, asgs.scanned_types());
+    }
+    if (!AirportArrowScanParallelStateNext(context, input.bind_data.get(), *result, global_state))
+    {
+      return nullptr;
+    }
+    return std::move(result);
+  }
+
+  unique_ptr<LocalTableFunctionState> AirportArrowScanInitLocal(ExecutionContext &context,
+                                                                TableFunctionInitInput &input,
+                                                                GlobalTableFunctionState *global_state_p)
+  {
+    return AirportArrowScanInitLocalInternal(context.client, input, global_state_p);
+  }
+
   void AddTakeFlightFunction(DatabaseInstance &instance)
   {
 
@@ -605,7 +686,7 @@ namespace duckdb
         AirportTakeFlight,
         take_flight_bind,
         AirportArrowScanInitGlobal,
-        ArrowTableFunction::ArrowScanInitLocal);
+        AirportArrowScanInitLocal);
 
     take_flight_function_with_descriptor.named_parameters["auth_token"] = LogicalType::VARCHAR;
     take_flight_function_with_descriptor.named_parameters["secret"] = LogicalType::VARCHAR;
@@ -626,7 +707,7 @@ namespace duckdb
         AirportTakeFlight,
         take_flight_bind_with_pointer,
         AirportArrowScanInitGlobal,
-        ArrowTableFunction::ArrowScanInitLocal);
+        AirportArrowScanInitLocal);
 
     take_flight_function_with_pointer.named_parameters["auth_token"] = LogicalType::VARCHAR;
     take_flight_function_with_pointer.named_parameters["secret"] = LogicalType::VARCHAR;

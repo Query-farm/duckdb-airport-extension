@@ -1032,7 +1032,6 @@ namespace duckdb
 
     auto scan_global_state = make_uniq<AirportArrowScanGlobalState>();
     scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<ArrowScanFunctionData>(), column_ids, nullptr);
-    scan_global_state->max_threads = 1;
 
     // Retain the global state.
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();
@@ -1242,7 +1241,7 @@ namespace duckdb
               AirportTakeFlight,
               AirportDynamicTableBind,
               AirportArrowScanInitGlobal,
-              ArrowTableFunction::ArrowScanInitLocal);
+              AirportArrowScanInitLocal);
         }
         else
         {
