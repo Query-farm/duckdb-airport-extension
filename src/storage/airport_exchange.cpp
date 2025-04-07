@@ -215,8 +215,8 @@ namespace duckdb
     // scan...
 
     // Init the global state.
-    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>();
-    scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<ArrowScanFunctionData>(), column_ids, nullptr);
+    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(
+        AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr));
 
     // Retain the global state.
     global_state->scan_global_state = std::move(scan_global_state);
@@ -231,7 +231,7 @@ namespace duckdb
     // Local init.
 
     auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto scan_local_state = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
+    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
     scan_local_state->column_ids = fake_init_input.column_ids;
     scan_local_state->filters = fake_init_input.filters.get();
 

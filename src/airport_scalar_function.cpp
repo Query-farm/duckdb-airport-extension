@@ -123,8 +123,8 @@ namespace duckdb
       vector<column_t> column_ids = {0};
 
       // So you need some endpoints here.
-      scan_global_state_ = make_uniq<AirportArrowScanGlobalState>();
-      scan_global_state_->stream = AirportProduceArrowScan(scan_bind_data_->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr);
+      scan_global_state_ = make_uniq<AirportArrowScanGlobalState>(
+          AirportProduceArrowScan(scan_bind_data_->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr));
 
       // There shouldn't be any projection ids.
       vector<idx_t> projection_ids;
@@ -136,7 +136,7 @@ namespace duckdb
           nullptr);
 
       auto current_chunk = make_uniq<ArrowArrayWrapper>();
-      scan_local_state_ = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
+      scan_local_state_ = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
       scan_local_state_->column_ids = fake_init_input.column_ids;
       scan_local_state_->filters = fake_init_input.filters.get();
     }
@@ -157,7 +157,7 @@ namespace duckdb
   private:
     std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data_;
     std::unique_ptr<AirportArrowScanGlobalState> scan_global_state_;
-    std::unique_ptr<ArrowScanLocalState> scan_local_state_;
+    std::unique_ptr<AirportArrowScanLocalState> scan_local_state_;
     std::unique_ptr<arrow::flight::FlightStreamWriter> writer_;
 
     const std::shared_ptr<arrow::Schema> function_output_schema_;
@@ -308,8 +308,7 @@ namespace duckdb
 
     scan_local_state_->Reset();
 
-    auto current_chunk = scan_global_state_->stream->GetNextChunk();
-    scan_local_state_->chunk = std::move(current_chunk);
+    scan_local_state_->chunk = scan_global_state_->stream()->GetNextChunk();
 
     auto output_size =
         MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(scan_local_state_->chunk->arrow_array.length) - scan_local_state_->chunk_offset);

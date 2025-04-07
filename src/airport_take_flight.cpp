@@ -27,7 +27,6 @@
 
 namespace duckdb
 {
-
   template <typename T>
   static std::vector<std::string> convert_to_strings(const std::vector<T> &vec)
   {
@@ -254,7 +253,7 @@ namespace duckdb
   }
 
   static bool AirportArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,
-                                                ArrowScanLocalState &state, AirportArrowScanGlobalState &parallel_state)
+                                                AirportArrowScanLocalState &state, AirportArrowScanGlobalState &parallel_state)
   {
     lock_guard<mutex> parallel_lock(parallel_state.main_mutex);
     if (parallel_state.done)
@@ -264,10 +263,10 @@ namespace duckdb
     state.Reset();
     state.batch_index = ++parallel_state.batch_index;
 
-    auto current_chunk = parallel_state.stream->GetNextChunk();
+    auto current_chunk = parallel_state.stream()->GetNextChunk();
     while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release)
     {
-      current_chunk = parallel_state.stream->GetNextChunk();
+      current_chunk = parallel_state.stream()->GetNextChunk();
     }
     state.chunk = std::move(current_chunk);
     //! have we run out of chunks? we are done
@@ -285,7 +284,7 @@ namespace duckdb
     {
       return;
     }
-    auto &state = data_p.local_state->Cast<ArrowScanLocalState>();
+    auto &state = data_p.local_state->Cast<AirportArrowScanLocalState>();
     auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
     auto &airport_bind_data = data_p.bind_data->CastNoConst<AirportTakeFlightBindData>();
 
@@ -630,7 +629,7 @@ namespace duckdb
 
     bind_data.scan_data()->setStream(std::move(stream));
 
-    result->stream = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get());
+    result->stream_ = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get());
 
     return std::move(result);
   }
@@ -648,7 +647,7 @@ namespace duckdb
   {
     auto &global_state = global_state_p->Cast<AirportArrowScanGlobalState>();
     auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto result = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
+    auto result = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
     result->column_ids = input.column_ids;
     result->filters = input.filters.get();
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();

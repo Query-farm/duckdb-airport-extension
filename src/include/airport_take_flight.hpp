@@ -7,10 +7,18 @@
 
 namespace duckdb
 {
+
+  struct AirportArrowScanLocalState : public ArrowScanLocalState
+  {
+  public:
+    explicit AirportArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk, ClientContext &context)
+        : ArrowScanLocalState(std::move(current_chunk), context)
+    {
+    }
+  };
+
   struct AirportArrowScanGlobalState : public GlobalTableFunctionState
   {
-
-    unique_ptr<ArrowArrayStreamWrapper> stream;
     mutex main_mutex;
     idx_t batch_index = 0;
     bool done = false;
@@ -29,7 +37,7 @@ namespace duckdb
     AirportArrowScanGlobalState(const vector<flight::FlightEndpoint> &endpoints,
                                 const vector<idx_t> &projection_ids,
                                 const vector<LogicalType> &scanned_types)
-        : endpoints_(endpoints), current_endpoint_(0), projection_ids_(projection_ids),
+        : stream_(nullptr), endpoints_(endpoints), current_endpoint_(0), projection_ids_(projection_ids),
           scanned_types_(scanned_types)
     {
       D_ASSERT(endpoints_.size() == 1);
@@ -37,14 +45,19 @@ namespace duckdb
 
     // There are cases where a list of endpoints isn't available, for example
     // the calls to DoExchange, so in that case don't set the endpoints.
-    AirportArrowScanGlobalState() : current_endpoint_(0)
-
+    explicit AirportArrowScanGlobalState(unique_ptr<ArrowArrayStreamWrapper> stream) : stream_(std::move(stream)),
+                                                                                       current_endpoint_(0)
     {
     }
 
     size_t total_endpoints() const
     {
       return endpoints_.size();
+    }
+
+    const unique_ptr<ArrowArrayStreamWrapper> &stream() const
+    {
+      return stream_;
     }
 
     const std::optional<const flight::FlightEndpoint> GetNextEndpoint()
@@ -65,6 +78,13 @@ namespace duckdb
     {
       return scanned_types_;
     }
+
+    const bool has_stream() const
+    {
+      return stream_ != nullptr;
+    }
+
+    unique_ptr<ArrowArrayStreamWrapper> stream_;
 
   private:
     vector<flight::FlightEndpoint> endpoints_;

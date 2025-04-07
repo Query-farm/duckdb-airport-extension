@@ -250,14 +250,12 @@ namespace duckdb
       lstate.read_from_flight_chunk.Reset();
 
       {
-        auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<ArrowScanFunctionData>(); // FIXME
-        auto &state = gstate.scan_table_function_input->local_state->Cast<ArrowScanLocalState>();
+        auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>(); // FIXME
+        auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
         auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
         state.Reset();
-
-        auto read_arrow_chunk = global_state.stream->GetNextChunk();
-        state.chunk = std::move(read_arrow_chunk);
+        state.chunk = global_state.stream()->GetNextChunk();
 
         auto output_size =
             MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
@@ -318,14 +316,13 @@ namespace duckdb
         gstate.flight_descriptor, "");
 
     {
-      //      auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<ArrowScanFunctionData>(); // FIXME
-      auto &state = gstate.scan_table_function_input->local_state->Cast<ArrowScanLocalState>();
+      //      auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>(); // FIXME
+      auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
       auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
       state.Reset();
 
-      auto current_chunk = global_state.stream->GetNextChunk();
-      state.chunk = std::move(current_chunk);
+      state.chunk = global_state.stream()->GetNextChunk();
 
       if (!gstate.scan_bind_data->scan_data->last_app_metadata_.empty())
       {

@@ -1030,8 +1030,7 @@ namespace duckdb
     // There shouldn't be any projection ids.
     vector<idx_t> projection_ids;
 
-    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>();
-    scan_global_state->stream = AirportProduceArrowScan(scan_bind_data->CastNoConst<ArrowScanFunctionData>(), column_ids, nullptr);
+    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr));
 
     // Retain the global state.
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();
@@ -1049,7 +1048,7 @@ namespace duckdb
     // Local init.
 
     auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto scan_local_state = make_uniq<ArrowScanLocalState>(std::move(current_chunk), context);
+    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
     scan_local_state->column_ids = fake_init_input.column_ids;
     scan_local_state->filters = fake_init_input.filters.get();
 
@@ -1107,12 +1106,11 @@ namespace duckdb
     // Rusty: for now just produce a chunk for every chunk read.
     output.Reset();
     {
-      auto &data = global_state.scan_table_function_input->bind_data->CastNoConst<ArrowScanFunctionData>();
-      auto &state = global_state.scan_table_function_input->local_state->Cast<ArrowScanLocalState>();
+      auto &data = global_state.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>();
+      auto &state = global_state.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
       auto &global_state2 = global_state.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
-      auto current_chunk = global_state2.stream->GetNextChunk();
-      state.chunk = std::move(current_chunk);
+      state.chunk = global_state2.stream()->GetNextChunk();
 
       auto output_size =
           MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
@@ -1144,12 +1142,11 @@ namespace duckdb
     bool is_finished = false;
     {
       auto &scan_data = global_state.scan_table_function_input;
-      auto &data = scan_data->bind_data->CastNoConst<ArrowScanFunctionData>();
-      auto &state = scan_data->local_state->Cast<ArrowScanLocalState>();
+      auto &data = scan_data->bind_data->CastNoConst<AirportTakeFlightBindData>();
+      auto &state = scan_data->local_state->Cast<AirportArrowScanLocalState>();
       auto &global_state2 = scan_data->global_state->Cast<AirportArrowScanGlobalState>();
 
-      auto current_chunk = global_state2.stream->GetNextChunk();
-      state.chunk = std::move(current_chunk);
+      state.chunk = global_state2.stream()->GetNextChunk();
 
       auto &last_app_metadata = global_state.scan_bind_data->scan_data->last_app_metadata_;
       if (last_app_metadata == "finished")
