@@ -47,7 +47,7 @@ namespace duckdb
 
     std::optional<std::string> GetTransactionIdentifier();
 
-    AirportTransactionState transaction_state;
+    AirportTransactionState transaction_state = AirportTransactionState::TRANSACTION_NOT_YET_STARTED;
     AccessMode access_mode_;
 
     // The name of the catalog where this transaction is running.

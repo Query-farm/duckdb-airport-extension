@@ -30,9 +30,9 @@ namespace duckdb
     else if (child.get().type == LogicalOperatorType::LOGICAL_FILTER ||
              child.get().type == LogicalOperatorType::LOGICAL_PROJECTION)
     {
-      for (auto &child : op->children)
+      for (auto &child_node : op->children)
       {
-        MarkAirportTakeFlightAsSkipProducing(child);
+        MarkAirportTakeFlightAsSkipProducing(child_node);
       }
     }
     else

@@ -168,7 +168,7 @@ namespace duckdb
                                       table_column_names,
                                       transaction.identifier());
 
-    return std::move(update_global_state);
+    return update_global_state;
   }
 
   unique_ptr<LocalSinkState> AirportUpdate::GetLocalSinkState(ExecutionContext &context) const

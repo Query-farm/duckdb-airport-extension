@@ -185,6 +185,7 @@ namespace duckdb
     D_ASSERT(table != nullptr);
 
     vector<string> returning_column_names;
+    returning_column_names.reserve(table->GetColumns().LogicalColumnCount());
     for (auto &cd : table->GetColumns().Logical())
     {
       returning_column_names.push_back(cd.GetName());
@@ -200,7 +201,7 @@ namespace duckdb
                                       returning_column_names,
                                       transaction.identifier());
 
-    return std::move(insert_global_state);
+    return insert_global_state;
   }
 
   unique_ptr<LocalSinkState> AirportInsert::GetLocalSinkState(ExecutionContext &context) const

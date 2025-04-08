@@ -116,6 +116,7 @@ namespace duckdb
                                   client_properties);
 
     vector<string> returning_column_names;
+    returning_column_names.reserve(table.GetColumns().LogicalColumnCount());
     for (auto &cd : table.GetColumns().Logical())
     {
       returning_column_names.push_back(cd.GetName());

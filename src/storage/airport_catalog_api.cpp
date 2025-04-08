@@ -528,7 +528,7 @@ namespace duckdb
       auto decompressed_url_contents = decompressZStandard(compressed_content.data, compressed_content.length, server_location);
 
       msgpack::object_handle oh = msgpack::unpack(
-          (const char *)decompressed_url_contents.data(),
+          reinterpret_cast<const char *>(decompressed_url_contents.data()),
           compressed_content.length,
           0);
       // FIXME: put this in the try/catch block since it could fail.
