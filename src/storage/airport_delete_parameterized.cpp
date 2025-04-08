@@ -49,7 +49,7 @@ namespace duckdb
     }
     else if (child.type == PhysicalOperatorType::TABLE_SCAN)
     {
-      auto &table_scan = child.Cast<PhysicalTableScan>();
+      const auto &table_scan = child.Cast<PhysicalTableScan>();
       if (!table_scan.table_filters)
       {
         return string();

@@ -37,21 +37,21 @@ namespace duckdb
 
   struct AirportGetFlightColumnStatisticsNumericValue
   {
-    bool boolean;
-    int8_t tinyint;
-    int16_t smallint;
-    int32_t integer;
-    int64_t bigint;
-    uint8_t utinyint;
-    uint16_t usmallint;
-    uint32_t uinteger;
-    uint64_t ubigint;
+    bool boolean = false;
+    int8_t tinyint = 0;
+    int16_t smallint = 0;
+    int32_t integer = 0;
+    int64_t bigint = 0;
+    uint8_t utinyint = 0;
+    uint16_t usmallint = 0;
+    uint32_t uinteger = 0;
+    uint64_t ubigint = 0;
 
-    uint64_t hugeint_high;
-    uint64_t hugeint_low;
+    uint64_t hugeint_high = 0;
+    uint64_t hugeint_low = 0;
 
-    float float_;   // NOLINT
-    double double_; // NOLINT
+    float float_ = 0.0;   // NOLINT
+    double double_ = 0.0; // NOLINT
 
     MSGPACK_DEFINE_MAP(boolean, tinyint, smallint, integer, bigint, utinyint, usmallint, uinteger, ubigint,
                        hugeint_high, hugeint_low,
@@ -104,9 +104,9 @@ namespace duckdb
   struct AirportGetFlightColumnStatisticsNumericStatsData
   {
     //! Whether or not the value has a max value
-    bool has_min;
+    bool has_min = false;
     //! Whether or not the segment has a min value
-    bool has_max;
+    bool has_max = false;
     //! The minimum value of the segment
     AirportGetFlightColumnStatisticsNumericValue min;
     //! The maximum value of the segment
@@ -125,11 +125,11 @@ namespace duckdb
   struct AirportGetFlightColumnStatisticsResult
   {
     //! Whether or not the segment can contain NULL values
-    bool has_null;
+    bool has_null = false;
     //! Whether or not the segment can contain values that are not null
-    bool has_no_null;
+    bool has_no_null = false;
     // estimate that one may have even if distinct_stats==nullptr
-    idx_t distinct_count;
+    idx_t distinct_count = 0;
 
     //! Numeric and String stats
     AirportGetFlightColumnStatisticsNumericStatsData numeric_stats;

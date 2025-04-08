@@ -39,12 +39,11 @@ namespace duckdb
   struct ListFlightsGlobalState : public GlobalTableFunctionState
   {
   public:
-    std::shared_ptr<flight::FlightClient> flight_client_;
+    const std::shared_ptr<flight::FlightClient> flight_client_;
     std::unique_ptr<flight::FlightListing> listing;
 
-    ListFlightsGlobalState(std::shared_ptr<flight::FlightClient> flight_client)
+    explicit ListFlightsGlobalState(std::shared_ptr<flight::FlightClient> flight_client) : flight_client_(flight_client)
     {
-      flight_client_ = flight_client;
     }
 
     idx_t MaxThreads() const override
@@ -54,7 +53,7 @@ namespace duckdb
 
     static unique_ptr<GlobalTableFunctionState> Init(ClientContext &context, TableFunctionInitInput &input)
     {
-      auto &bind_data = input.bind_data->Cast<ListFlightsBindData>();
+      const auto &bind_data = input.bind_data->Cast<ListFlightsBindData>();
 
       auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location);
 
@@ -131,7 +130,7 @@ namespace duckdb
         "schema"};
     names.insert(names.end(), list_flights_field_names.begin(), list_flights_field_names.end());
 
-    return std::move(ret);
+    return ret;
   }
 
   static void list_flights(ClientContext &context, TableFunctionInput &data, DataChunk &output)

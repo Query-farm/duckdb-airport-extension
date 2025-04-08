@@ -60,7 +60,7 @@ namespace duckdb
   public:
     explicit AirportCatalog(AttachedDatabase &db_p, const string &internal_name, AccessMode access_mode,
                             AirportAttachParameters attach_params);
-    ~AirportCatalog();
+    ~AirportCatalog() override;
 
   public:
     void Initialize(bool load_builtin) override;

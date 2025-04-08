@@ -19,7 +19,7 @@ namespace duckdb
     auto result = make_uniq<ClearCacheFunctionData>();
     return_types.push_back(LogicalType::BOOLEAN);
     names.emplace_back("Success");
-    return std::move(result);
+    return result;
   }
 
   static void ClearAirportCaches(ClientContext &context)

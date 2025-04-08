@@ -232,9 +232,10 @@ namespace duckdb
     }
 
   private:
+    // The total number of endpoints that will be scanned, this is used
+    // in calculating the progress of the scan.
     size_t total_endpoints_ = 0;
     // This is the progress of the scan.
-
     std::unique_ptr<std::atomic<double>[]> progress_array = nullptr;
 
     // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.

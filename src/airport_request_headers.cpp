@@ -90,7 +90,7 @@ namespace duckdb
 
     if (descriptor.has_value())
     {
-      auto &flight_descriptor = descriptor.value();
+      const auto &flight_descriptor = descriptor.value();
       airport_add_flight_path_header(options, flight_descriptor);
     }
   }

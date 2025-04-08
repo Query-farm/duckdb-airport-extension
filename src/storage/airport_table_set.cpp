@@ -611,7 +611,7 @@ namespace duckdb
     std::shared_ptr<AirportAPITableFunction> function;
 
   public:
-    AirportDynamicTableFunctionInfo(const std::shared_ptr<AirportAPITableFunction> function_p)
+    explicit AirportDynamicTableFunctionInfo(const std::shared_ptr<AirportAPITableFunction> function_p)
         : TableFunctionInfo(), function(function_p)
     {
     }
@@ -866,24 +866,30 @@ namespace duckdb
 
     ArrowSchemaTableFunctionTypes result;
     auto &config = DBConfig::GetConfig(context);
+    const idx_t column_count = (idx_t)schema_root.arrow_schema.n_children;
+
+    result.all_names.reserve(column_count);
+    result.all.reserve(column_count);
+    result.positional_names.reserve(column_count);
+    result.positional.reserve(column_count);
 
     for (idx_t col_idx = 0;
-         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+         col_idx < column_count; col_idx++)
     {
-      auto &schema = *schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
+      auto &schema_item = *schema_root.arrow_schema.children[col_idx];
+      if (!schema_item.release)
       {
         throw InvalidInputException("AirportSchemaToLogicalTypes: released schema passed");
       }
-      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema_item);
 
-      if (schema.dictionary)
+      if (schema_item.dictionary)
       {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema_item.dictionary);
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 
-      auto metadata = ArrowSchemaMetadata(schema.metadata);
+      auto metadata = ArrowSchemaMetadata(schema_item.metadata);
 
       if (!metadata.GetOption("is_table_input").empty())
       {
@@ -894,11 +900,11 @@ namespace duckdb
         result.all.emplace_back(arrow_type->GetDuckType());
       }
 
-      result.all_names.emplace_back(string(schema.name));
+      result.all_names.emplace_back(string(schema_item.name));
 
       if (!metadata.GetOption("is_named_parameter").empty())
       {
-        result.named[schema.name] = arrow_type->GetDuckType();
+        result.named[schema_item.name] = arrow_type->GetDuckType();
       }
       else
       {
@@ -910,7 +916,7 @@ namespace duckdb
         {
           result.positional.emplace_back(arrow_type->GetDuckType());
         }
-        result.positional_names.push_back(string(schema.name));
+        result.positional_names.push_back(string(schema_item.name));
       }
     }
     return result;

@@ -211,12 +211,12 @@ namespace duckdb
     {
       arrow::ipc::DictionaryMemo dictionary_memo;
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
-          auto schema,
+          auto extracted_schema,
           flight_info.GetSchema(&dictionary_memo),
           server_location,
           flight_info.descriptor(),
           "GetSchema");
-      return schema;
+      return extracted_schema;
     }
 
   private:

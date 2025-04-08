@@ -27,15 +27,6 @@
 
 namespace duckdb
 {
-  template <typename T>
-  static std::vector<std::string> convert_to_strings(const std::vector<T> &vec)
-  {
-    std::vector<std::string> result(vec.size());
-    std::transform(vec.begin(), vec.end(), result.begin(), [](const T &elem)
-                   { return std::to_string(elem); });
-    return result;
-  }
-
   // Create a FlightDescriptor from a DuckDB value which can be one of a few different
   // types.
   static flight::FlightDescriptor flight_descriptor_from_value(duckdb::Value &flight_descriptor)
@@ -196,7 +187,7 @@ namespace duckdb
                          &ret->rowid_column_index,
                          true);
 
-    return std::move(ret);
+    return ret;
   }
 
   static unique_ptr<FunctionData> take_flight_bind(
@@ -227,7 +218,7 @@ namespace duckdb
       throw BinderException("airport: take_flight_with_pointer, pointers to AirportTable cannot be null");
     }
 
-    const auto info = reinterpret_cast<duckdb::AirportAPITable *>(input.inputs[0].GetPointer());
+    const auto info = reinterpret_cast<const duckdb::AirportAPITable *>(input.inputs[0].GetPointer());
 
     AirportTakeFlightParameters params(info->server_location(), context, input);
 
@@ -252,7 +243,7 @@ namespace duckdb
         std::nullopt);
   }
 
-  static bool AirportArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,
+  static bool AirportArrowScanParallelStateNext(const ClientContext &context, const FunctionData *bind_data_p,
                                                 AirportArrowScanLocalState &state, AirportArrowScanGlobalState &parallel_state)
   {
     lock_guard<mutex> parallel_lock(parallel_state.main_mutex);
@@ -520,7 +511,11 @@ namespace duckdb
 
     std::string_view serialized_endpoint_info(reinterpret_cast<const char *>(serialized_endpoint_info_buffer->body->data()), serialized_endpoint_info_buffer->body->size());
 
-    AIRPORT_MSGPACK_UNPACK(std::vector<std::string>, serialized_endpoints, serialized_endpoint_info, server_location, "File to parse msgpack encoded endpoints");
+    AIRPORT_MSGPACK_UNPACK(std::vector<std::string>,
+                           serialized_endpoints,
+                           serialized_endpoint_info,
+                           server_location,
+                           "File to parse msgpack encoded endpoints");
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "get_flight_endpoints drain");
 
@@ -636,10 +631,12 @@ namespace duckdb
 
     bind_data.scan_data()->setStream(std::move(stream));
 
-    result->stream_ = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get(),
+    result->stream_ = AirportProduceArrowScan(bind_data,
+                                              input.column_ids,
+                                              input.filters.get(),
                                               bind_data.get_progress_counter(0));
 
-    return std::move(result);
+    return result;
   }
 
   static double take_flight_scan_progress(ClientContext &, const FunctionData *data, const GlobalTableFunctionState *global_state)
@@ -670,7 +667,7 @@ namespace duckdb
     {
       return nullptr;
     }
-    return std::move(result);
+    return result;
   }
 
   unique_ptr<LocalTableFunctionState> AirportArrowScanInitLocal(ExecutionContext &context,

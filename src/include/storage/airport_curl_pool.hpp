@@ -13,7 +13,7 @@ namespace duckdb
   {
   public:
     // Constructor: Initializes a pool with the given number of CURL handles
-    AirportCurlPool(size_t size);
+    explicit AirportCurlPool(size_t size);
 
     // Destructor: Cleans up all CURL handles in the pool
     ~AirportCurlPool();

@@ -38,7 +38,7 @@ namespace duckdb
   class AirportInSchemaSet : public AirportCatalogSet
   {
   public:
-    AirportInSchemaSet(AirportSchemaEntry &schema);
+    explicit AirportInSchemaSet(AirportSchemaEntry &schema);
 
     optional_ptr<CatalogEntry> CreateEntry(unique_ptr<CatalogEntry> entry) override;
 

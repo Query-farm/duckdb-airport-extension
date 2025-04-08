@@ -64,11 +64,10 @@
 
 #define AIRPORT_MSGPACK_UNPACK(destination_type, destination_name, source, location, message) \
   destination_type destination_name;                                                          \
-  memset(&destination_name, 0, sizeof(destination_type));                                     \
   try                                                                                         \
   {                                                                                           \
     msgpack::object_handle oh = msgpack::unpack(                                              \
-        (const char *)source.data(),                                                          \
+        reinterpret_cast<const char *>(source.data()),                                        \
         source.size(),                                                                        \
         0);                                                                                   \
     msgpack::object obj = oh.get();                                                           \
@@ -88,5 +87,5 @@
   arrow::flight::Action result_name{                                                  \
       action_name,                                                                    \
       std::make_shared<arrow::Buffer>(                                                \
-          (uint8_t *)parameters_packed_buffer.data(),                                 \
+          reinterpret_cast<const uint8_t *>(parameters_packed_buffer.data()),         \
           parameters_packed_buffer.size())};

@@ -15,10 +15,10 @@ namespace duckdb
 {
 
   AirportTransaction::AirportTransaction(AirportCatalog &airport_catalog, TransactionManager &manager, ClientContext &context)
-      : Transaction(manager, context), access_mode_(airport_catalog.access_mode())
+      : Transaction(manager, context), access_mode_(airport_catalog.access_mode()),
+        catalog_name(airport_catalog.internal_name()),
+        attach_parameters(airport_catalog.attach_parameters())
   {
-    attach_parameters = airport_catalog.attach_parameters();
-    catalog_name = airport_catalog.internal_name();
   }
 
   AirportTransaction::~AirportTransaction() = default;
