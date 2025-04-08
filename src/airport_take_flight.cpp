@@ -394,9 +394,10 @@ namespace duckdb
   unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(
       const ArrowScanFunctionData &function,
       const vector<column_t> &column_ids,
-      TableFilterSet *filters)
+      TableFilterSet *filters,
+      atomic<double> *progress)
   {
-    ArrowStreamParameters parameters;
+    AirportArrowStreamParameters parameters;
 
     auto &projected = parameters.projected_columns;
     // Preallocate space for efficiency
@@ -416,6 +417,8 @@ namespace duckdb
     }
 
     parameters.filters = filters;
+
+    parameters.progress = progress;
 
     return function.scanner_producer(function.stream_factory_ptr, parameters);
   }
@@ -537,7 +540,7 @@ namespace duckdb
   unique_ptr<GlobalTableFunctionState> AirportArrowScanInitGlobal(ClientContext &context,
                                                                   TableFunctionInitInput &input)
   {
-    auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
+    auto &bind_data = input.bind_data->CastNoConst<AirportTakeFlightBindData>();
 
     // Ideally this is where we call GetFlightInfo to obtain the endpoints, but
     // GetFlightInfo can't take the predicate information, so we'll need to call an
@@ -580,6 +583,10 @@ namespace duckdb
                                   bind_data.json_filters,
                                   input.column_ids),
         projection_ids, scanned_types);
+
+    // Store the total number of endpoints in the bind data so progress
+    // can be reported across all endpoints.
+    bind_data.set_endpoint_count(result->total_endpoints());
 
     auto &first_endpoint_opt = result->GetNextEndpoint();
     if (!first_endpoint_opt)
@@ -629,16 +636,15 @@ namespace duckdb
 
     bind_data.scan_data()->setStream(std::move(stream));
 
-    result->stream_ = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get());
+    result->stream_ = AirportProduceArrowScan(bind_data, input.column_ids, input.filters.get(),
+                                              bind_data.get_progress_counter(0));
 
     return std::move(result);
   }
 
   static double take_flight_scan_progress(ClientContext &, const FunctionData *data, const GlobalTableFunctionState *global_state)
   {
-    auto &bind_data = data->Cast<AirportTakeFlightBindData>();
-    // FIXME: this will have to be adapted for multiple endpoints
-    return bind_data.scan_data()->progress_ * 100.0;
+    return data->Cast<AirportTakeFlightBindData>().total_progress();
   }
 
   static unique_ptr<LocalTableFunctionState>

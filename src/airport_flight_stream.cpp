@@ -65,7 +65,7 @@ namespace duckdb
           if (progress_)
           {
             AIRPORT_MSGPACK_UNPACK_CONTAINER(AirportScannerProgress, progress_report, (*chunk.app_metadata), this, "File to parse msgpack encoded object progress message");
-            *progress_ = progress_report.progress; // Update the progress
+            progress_->store(progress_report.progress, std::memory_order_relaxed);
           }
         }
         if (!chunk.data && !chunk.app_metadata)
@@ -123,6 +123,7 @@ namespace duckdb
     assert(buffer_ptr != 0);
 
     auto buffer_data = reinterpret_cast<AirportTakeFlightScanData *>(buffer_ptr);
+    auto airport_parameters = reinterpret_cast<AirportArrowStreamParameters *>(&parameters);
 
     // We're playing a trick here to recast the FlightStreamReader as a RecordBatchReader,
     // I'm not sure how else to do this.
@@ -135,7 +136,7 @@ namespace duckdb
         FlightMakeRecordBatchReader(
             buffer_data->stream(),
             *buffer_data,
-            &buffer_data->progress_,
+            airport_parameters->progress,
             &buffer_data->last_app_metadata_),
         buffer_data,
         "");

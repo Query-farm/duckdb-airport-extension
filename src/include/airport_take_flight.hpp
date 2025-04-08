@@ -50,7 +50,7 @@ namespace duckdb
     {
     }
 
-    size_t total_endpoints() const
+    const size_t total_endpoints() const
     {
       return endpoints_.size();
     }
@@ -95,7 +95,8 @@ namespace duckdb
 
   unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(const ArrowScanFunctionData &function,
                                                               const vector<column_t> &column_ids,
-                                                              TableFilterSet *filters);
+                                                              TableFilterSet *filters,
+                                                              atomic<double> *progress);
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 

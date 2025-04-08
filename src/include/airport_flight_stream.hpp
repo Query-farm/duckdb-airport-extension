@@ -25,6 +25,12 @@ namespace flight = arrow::flight;
 namespace duckdb
 {
 
+  struct AirportArrowStreamParameters : public ArrowStreamParameters
+  {
+  public:
+    atomic<double> *progress = nullptr;
+  };
+
   // This is the structure that is passed to the function that can create the stream.
   struct AirportTakeFlightScanData : public AirportLocationDescriptor
   {
@@ -53,7 +59,6 @@ namespace duckdb
       stream_ = stream;
     }
 
-    atomic<double> progress_;
     string last_app_metadata_;
 
   private:
@@ -195,7 +200,48 @@ namespace duckdb
         vector<LogicalType> &return_types,
         vector<string> &names);
 
+    void set_endpoint_count(const size_t endpoint_count)
+    {
+      total_endpoints_ = endpoint_count;
+      progress_array = std::unique_ptr<std::atomic<double>[]>(new std::atomic<double>[endpoint_count]);
+      for (size_t i = 0; i < endpoint_count; i++)
+      {
+        progress_array[i].store(0.0);
+      }
+    }
+
+    atomic<double> *get_progress_counter(const idx_t endpoint_index)
+    {
+      if (endpoint_index < total_endpoints_)
+      {
+        return &progress_array[endpoint_index];
+      }
+      else
+      {
+        throw InvalidInputException("airport_take_flight: endpoint index out of range");
+      }
+    }
+
+    double_t total_progress() const
+    {
+      double_t total = 0.0;
+      if (total_endpoints_ == 0)
+      {
+        return 0.0;
+      }
+      for (size_t i = 0; i < total_endpoints_; i++)
+      {
+        total += progress_array[i].load(std::memory_order_relaxed); // or acquire
+      }
+      return total / (double_t)total_endpoints_;
+    }
+
   private:
+    size_t total_endpoints_ = 0;
+    // This is the progress of the scan.
+
+    std::unique_ptr<std::atomic<double>[]> progress_array = nullptr;
+
     // This is the trace id so that calls to GetFlightInfo and DoGet can be traced.
     const string trace_id_;
 

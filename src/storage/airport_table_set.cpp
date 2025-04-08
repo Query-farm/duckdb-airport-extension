@@ -1030,7 +1030,13 @@ namespace duckdb
     // There shouldn't be any projection ids.
     vector<idx_t> projection_ids;
 
-    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr));
+    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(
+        AirportProduceArrowScan(
+            scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
+            column_ids,
+            nullptr,
+            // Can't use progress reporting here.
+            nullptr));
 
     // Retain the global state.
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();

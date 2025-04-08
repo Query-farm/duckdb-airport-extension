@@ -216,7 +216,12 @@ namespace duckdb
 
     // Init the global state.
     auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(
-        AirportProduceArrowScan(scan_bind_data->CastNoConst<AirportTakeFlightBindData>(), column_ids, nullptr));
+        AirportProduceArrowScan(
+            scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
+            column_ids,
+            nullptr,
+            // No progress reporting.
+            nullptr));
 
     // Retain the global state.
     global_state->scan_global_state = std::move(scan_global_state);
