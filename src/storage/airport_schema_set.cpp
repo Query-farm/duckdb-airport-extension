@@ -16,9 +16,9 @@
 namespace duckdb
 {
   // Set the connection pool size.
-  AirportSchemaSet::AirportSchemaSet(Catalog &catalog) : AirportCatalogSet(catalog), connection_pool(32)
+  AirportSchemaSet::AirportSchemaSet(Catalog &catalog) : AirportCatalogSet(catalog), connection_pool(32),
+                                                         catalog_name(catalog.GetName())
   {
-    catalog_name = catalog.GetName();
   }
 
   static bool IsInternalTable(const string &catalog, const string &schema)

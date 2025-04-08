@@ -9,17 +9,18 @@ namespace duckdb
 
   struct AirportTableInfo
   {
-    AirportTableInfo()
+    AirportTableInfo() : create_info(make_uniq<CreateTableInfo>())
     {
-      create_info = make_uniq<CreateTableInfo>();
     }
+
     AirportTableInfo(const string &schema, const string &table)
+        : create_info(make_uniq<CreateTableInfo>(string(), schema, table))
     {
-      create_info = make_uniq<CreateTableInfo>(string(), schema, table);
     }
+
     AirportTableInfo(const SchemaCatalogEntry &schema, const string &table)
+        : create_info(make_uniq<CreateTableInfo>((SchemaCatalogEntry &)schema, table))
     {
-      create_info = make_uniq<CreateTableInfo>((SchemaCatalogEntry &)schema, table);
     }
 
     const string &GetTableName() const

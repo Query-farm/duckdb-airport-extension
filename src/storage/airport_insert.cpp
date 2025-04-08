@@ -163,7 +163,7 @@ namespace duckdb
 
     auto insert_global_state = make_uniq<AirportInsertGlobalState>(context, table.get(), GetTypes(), return_chunk);
 
-    auto &transaction = AirportTransaction::Get(context, insert_table->catalog);
+    const auto &transaction = AirportTransaction::Get(context, insert_table->catalog);
     // auto &connection = transaction.GetConnection();
     auto [send_names, send_types] = AirportGetInsertColumns(*this, *table);
 

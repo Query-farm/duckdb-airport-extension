@@ -258,7 +258,7 @@ namespace duckdb
   class AirportArrowArrayStreamWrapper : public duckdb::ArrowArrayStreamWrapper, public AirportLocationDescriptor
   {
   public:
-    AirportArrowArrayStreamWrapper(const AirportLocationDescriptor &location_descriptor) : AirportLocationDescriptor(location_descriptor) {}
+    explicit AirportArrowArrayStreamWrapper(const AirportLocationDescriptor &location_descriptor) : AirportLocationDescriptor(location_descriptor) {}
 
     shared_ptr<ArrowArrayWrapper> GetNextChunk();
   };

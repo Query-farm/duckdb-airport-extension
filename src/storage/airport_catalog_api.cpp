@@ -124,7 +124,7 @@ namespace duckdb
 
   static size_t GetRequestWriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
   {
-    ((std::string *)userp)->append((char *)contents, size * nmemb);
+    ((std::string *)userp)->append(reinterpret_cast<const char *>(contents), size * nmemb);
     return size * nmemb;
   }
 
@@ -287,7 +287,7 @@ namespace duckdb
         throw IOException("Catalog " + catalog_name + " SHA256 Mismatch expected " + collection.source.sha256 + " found " + found_sha);
       }
       auto &data = collection.source.serialized.value();
-      oh = msgpack::unpack((const char *)data.data(), data.size(), 0);
+      oh = msgpack::unpack(reinterpret_cast<const char *>(data.data()), data.size(), 0);
     }
     else if (collection.source.url.has_value())
     {
@@ -298,7 +298,7 @@ namespace duckdb
       {
         throw IOException("Catalog " + catalog_name + " failed to retrieve schema collection contents from URL: " + collection.source.url.value());
       }
-      oh = msgpack::unpack((const char *)get_result.second.data(), get_result.second.size(), 0);
+      oh = msgpack::unpack(reinterpret_cast<const char *>(get_result.second.data()), get_result.second.size(), 0);
     }
     else
     {
@@ -446,13 +446,13 @@ namespace duckdb
     return app_metadata_obj;
   }
 
-  void handle_flight_app_metadata(const string &app_metadata,
-                                  const string &catalog_name,
-                                  const string &schema_name,
-                                  const string &server_location,
-                                  const flight::FlightDescriptor &descriptor,
-                                  std::shared_ptr<arrow::Schema> schema,
-                                  unique_ptr<AirportSchemaContents> &contents)
+  static void handle_flight_app_metadata(const string &app_metadata,
+                                         const string &catalog_name,
+                                         const string &schema_name,
+                                         const string &server_location,
+                                         const flight::FlightDescriptor &descriptor,
+                                         std::shared_ptr<arrow::Schema> schema,
+                                         const unique_ptr<AirportSchemaContents> &contents)
   {
     auto parsed_app_metadata = ParseFlightAppMetadata(app_metadata, server_location);
     if (!(parsed_app_metadata.catalog == catalog_name && parsed_app_metadata.schema == schema_name))
@@ -600,22 +600,24 @@ namespace duckdb
                                                 "ExportSchema");
     auto &config = DBConfig::GetConfig(context);
 
+    const auto number_of_columns = (idx_t)schema_root.arrow_schema.n_children;
+
     for (idx_t col_idx = 0;
-         col_idx < (idx_t)schema_root.arrow_schema.n_children; col_idx++)
+         col_idx < number_of_columns; col_idx++)
     {
-      auto &schema = *schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
+      auto &schema_child = *schema_root.arrow_schema.children[col_idx];
+      if (!schema_child.release)
       {
         throw InvalidInputException("airport_take_flight: released schema passed");
       }
 
-      if (schema.metadata != nullptr)
+      if (schema_child.metadata != nullptr)
       {
-        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
+        auto column_metadata = ArrowSchemaMetadata(schema_child.metadata);
         auto comment = column_metadata.GetOption("is_rowid");
         if (!comment.empty())
         {
-          auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
+          auto arrow_type = ArrowType::GetArrowLogicalType(config, schema_child);
           return arrow_type->GetDuckType();
         }
       }
@@ -656,7 +658,7 @@ namespace duckdb
       throw AirportFlightException(server_location, "Failed to obtain schema data from Arrow Flight server via DoAction()");
     }
 
-    auto &body_buffer = msgpack_serialized_response.get()->body;
+    const auto &body_buffer = msgpack_serialized_response.get()->body;
     AIRPORT_MSGPACK_UNPACK(AirportSerializedCompressedContent, compressed_content,
                            (*body_buffer),
                            server_location,

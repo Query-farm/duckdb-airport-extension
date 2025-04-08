@@ -42,7 +42,7 @@ namespace duckdb
 
   optional_ptr<CatalogEntry> AirportSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info)
   {
-    auto &base_info = info.Base();
+    const auto &base_info = info.Base();
     auto table_name = base_info.table;
     if (base_info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT)
     {
@@ -74,7 +74,7 @@ namespace duckdb
     throw NotImplementedException("CreateIndex");
   }
 
-  string GetAirportCreateView(CreateViewInfo &info)
+  string GetAirportCreateView(const CreateViewInfo &info)
   {
     throw NotImplementedException("GetCreateView");
   }

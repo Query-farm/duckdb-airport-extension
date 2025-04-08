@@ -185,8 +185,6 @@ namespace duckdb
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options, data.take_flight_params(), data.trace_id());
 
-    std::stringstream packed_buffer;
-
     auto &server_location = data.take_flight_params().server_location();
 
     AirportGetFlightColumnStatistics params;

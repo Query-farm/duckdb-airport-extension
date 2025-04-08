@@ -378,17 +378,17 @@ namespace duckdb
     {
       if (c->type == ConstraintType::NOT_NULL)
       {
-        auto not_null_constraint = (NotNullConstraint *)c.get();
+        auto not_null_constraint = reinterpret_cast<NotNullConstraint *>(c.get());
         params.not_null_constraints.push_back(not_null_constraint->index.index);
       }
       else if (c->type == ConstraintType::UNIQUE)
       {
-        auto unique_constraint = (UniqueConstraint *)c.get();
+        auto unique_constraint = reinterpret_cast<UniqueConstraint *>(c.get());
         params.unique_constraints.push_back(unique_constraint->index.index);
       }
       else if (c->type == ConstraintType::CHECK)
       {
-        auto check_constraint = (CheckConstraint *)c.get();
+        auto check_constraint = reinterpret_cast<CheckConstraint *>(c.get());
         params.check_constraints.push_back(check_constraint->expression->ToString());
       }
     }
@@ -497,24 +497,24 @@ namespace duckdb
     for (idx_t col_idx = 0;
          col_idx < column_count; col_idx++)
     {
-      auto &schema = *schema_root.arrow_schema.children[col_idx];
-      if (!schema.release)
+      auto &schema_item = *schema_root.arrow_schema.children[col_idx];
+      if (!schema_item.release)
       {
         throw InvalidInputException("AirportSchemaToLogicalTypes: released schema passed");
       }
-      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema_item);
 
-      if (schema.dictionary)
+      if (schema_item.dictionary)
       {
-        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema.dictionary);
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema_item.dictionary);
         arrow_type->SetDictionary(std::move(dictionary_type));
       }
 
       // Indicate that the field should select any type.
       bool is_any_type = false;
-      if (schema.metadata != nullptr)
+      if (schema_item.metadata != nullptr)
       {
-        auto column_metadata = ArrowSchemaMetadata(schema.metadata);
+        auto column_metadata = ArrowSchemaMetadata(schema_item.metadata);
         if (!column_metadata.GetOption("is_any_type").empty())
         {
           is_any_type = true;
@@ -795,7 +795,7 @@ namespace duckdb
 
     // Then call the DoAction get_dynamic_flight_info with those arguments.
     AirportGetFlightInfoTableFunctionParameters tf_params;
-    tf_params.parameters = string((char *)buffer->data(), buffer->size());
+    tf_params.parameters = buffer->ToString();
     tf_params.schema_name = function_info.function->schema_name();
     tf_params.action_name = function_info.function->action_name();
 
@@ -1075,9 +1075,13 @@ namespace duckdb
         global_state->scan_local_state.get(),
         global_state->scan_global_state.get());
 
+<<<<<<< HEAD
     unique_ptr<duckdb::GlobalTableFunctionState> base_wrapper = std::move(global_state);
 
     return base_wrapper;
+=======
+    return global_state;
+>>>>>>> f1c2629 (fix: cppcheck fixes)
   }
 
   static OperatorResultType AirportTakeFlightInOut(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,

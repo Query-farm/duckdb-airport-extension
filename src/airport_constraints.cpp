@@ -128,7 +128,6 @@ namespace duckdb
     for (idx_t i = 0; i < state.bound_constraints.size(); i++)
     {
       auto &base_constraint = constraints[i];
-      auto &constraint = state.bound_constraints[i];
       switch (base_constraint->type)
       {
       case ConstraintType::NOT_NULL:
@@ -148,6 +147,8 @@ namespace duckdb
       }
       case ConstraintType::CHECK:
       {
+        auto &constraint = state.bound_constraints[i];
+
         auto &check = constraint->Cast<BoundCheckConstraint>();
         auto &unbound_constraint = base_constraint->Cast<CheckConstraint>();
         VerifyCheckConstraint(context, table, *check.expression, chunk, unbound_constraint);

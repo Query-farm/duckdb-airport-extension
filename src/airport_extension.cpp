@@ -47,7 +47,7 @@ namespace duckdb
         //! Set redact keys
         result->redact_keys = {"auth_token"};
 
-        return std::move(result);
+        return result;
     }
 
     static void SetAirportSecretParameters(CreateSecretFunction &function)

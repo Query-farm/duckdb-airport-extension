@@ -159,7 +159,7 @@ namespace duckdb
       return nullptr;
     }
 
-    return std::move(stream_wrapper);
+    return stream_wrapper;
   }
 
   shared_ptr<ArrowArrayWrapper> AirportArrowArrayStreamWrapper::GetNextChunk()
