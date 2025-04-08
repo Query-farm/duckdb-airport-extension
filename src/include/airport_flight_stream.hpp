@@ -195,11 +195,6 @@ namespace duckdb
       return schema_;
     }
 
-    void examine_schema(
-        ClientContext &context,
-        vector<LogicalType> &return_types,
-        vector<string> &names);
-
     void set_endpoint_count(const size_t endpoint_count)
     {
       total_endpoints_ = endpoint_count;
@@ -210,7 +205,7 @@ namespace duckdb
       }
     }
 
-    atomic<double> *get_progress_counter(const idx_t endpoint_index)
+    atomic<double> *get_progress_counter(const idx_t endpoint_index) const
     {
       if (endpoint_index < total_endpoints_)
       {
