@@ -78,7 +78,6 @@ namespace duckdb
 
       auto scan_data = make_uniq<AirportTakeFlightScanData>(
           *this,
-          function_output_schema_,
           std::move(exchange_result.reader));
 
       scan_bind_data_ = make_uniq<AirportExchangeTakeFlightBindData>(

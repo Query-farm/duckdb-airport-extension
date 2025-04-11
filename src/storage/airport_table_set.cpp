@@ -987,7 +987,6 @@ namespace duckdb
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
         *bind_data.scan_data(),
-        bind_data.schema(),
         std::move(exchange_result.reader));
 
     vector<column_t> column_ids;

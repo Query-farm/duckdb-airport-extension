@@ -109,7 +109,6 @@ namespace duckdb
     {
       scan_data = make_uniq<AirportTakeFlightScanData>(
           AirportLocationDescriptor(take_flight_params.server_location(), descriptor),
-          schema,
           nullptr);
     }
     else
@@ -163,7 +162,6 @@ namespace duckdb
 
       scan_data = make_uniq<AirportTakeFlightScanData>(
           AirportLocationDescriptor(server_location, descriptor),
-          schema,
           nullptr);
     }
 
@@ -411,6 +409,7 @@ namespace duckdb
 
     parameters.filters = filters;
 
+    // TODO
     // RUSTY: replace this.
     return function.scanner_producer(function.stream_factory_ptr, parameters);
   }

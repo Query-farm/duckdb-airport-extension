@@ -57,16 +57,9 @@ namespace duckdb
   public:
     AirportTakeFlightScanData(
         const AirportLocationDescriptor &location_descriptor,
-        const std::shared_ptr<arrow::Schema> &schema,
         const std::shared_ptr<flight::FlightStreamReader> &stream) : AirportLocationDescriptor(location_descriptor),
-                                                                     schema_(schema),
                                                                      stream_(stream)
     {
-    }
-
-    const std::shared_ptr<arrow::Schema> &schema() const
-    {
-      return schema_;
     }
 
     const std::shared_ptr<arrow::flight::FlightStreamReader> stream() const
@@ -80,7 +73,6 @@ namespace duckdb
     }
 
   private:
-    const std::shared_ptr<arrow::Schema> schema_;
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
   };
 
