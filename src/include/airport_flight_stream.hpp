@@ -55,13 +55,11 @@ namespace duckdb
   };
 
   // This is the structure that is passed to the function that can create the stream.
-  struct AirportTakeFlightScanData : public AirportLocationDescriptor
+  struct AirportTakeFlightScanData
   {
   public:
-    AirportTakeFlightScanData(
-        const AirportLocationDescriptor &location_descriptor,
-        const std::shared_ptr<flight::FlightStreamReader> &stream) : AirportLocationDescriptor(location_descriptor),
-                                                                     stream_(stream)
+    explicit AirportTakeFlightScanData(
+        const std::shared_ptr<flight::FlightStreamReader> &stream) : stream_(stream)
     {
     }
 

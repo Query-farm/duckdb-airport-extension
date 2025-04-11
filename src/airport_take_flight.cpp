@@ -107,9 +107,7 @@ namespace duckdb
 
     if (schema != nullptr)
     {
-      scan_data = make_uniq<AirportTakeFlightScanData>(
-          AirportLocationDescriptor(take_flight_params.server_location(), descriptor),
-          nullptr);
+      scan_data = make_uniq<AirportTakeFlightScanData>(nullptr);
     }
     else
     {
@@ -160,9 +158,7 @@ namespace duckdb
                                                          descriptor,
                                                          "");
 
-      scan_data = make_uniq<AirportTakeFlightScanData>(
-          AirportLocationDescriptor(server_location, descriptor),
-          nullptr);
+      scan_data = make_uniq<AirportTakeFlightScanData>(nullptr);
     }
 
     auto ret = make_uniq<AirportTakeFlightBindData>(

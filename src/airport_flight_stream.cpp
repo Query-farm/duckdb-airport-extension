@@ -108,7 +108,7 @@ namespace duckdb
     auto airport_parameters = reinterpret_cast<AirportArrowStreamParameters *>(&parameters);
 
     auto reader = std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
-        *buffer_data,
+        *airport_parameters,
         airport_parameters->progress,
         airport_parameters->last_app_metadata,
         airport_parameters->schema(),
@@ -116,7 +116,7 @@ namespace duckdb
 
     // Create arrow stream
     //    auto stream_wrapper = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();
-    auto stream_wrapper = duckdb::make_uniq<AirportArrowArrayStreamWrapper>(*buffer_data);
+    auto stream_wrapper = duckdb::make_uniq<AirportArrowArrayStreamWrapper>(*airport_parameters);
     stream_wrapper->arrow_array_stream.release = nullptr;
 
     auto maybe_ok = arrow::ExportRecordBatchReader(
