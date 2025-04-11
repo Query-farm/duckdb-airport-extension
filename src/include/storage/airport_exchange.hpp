@@ -26,7 +26,6 @@ namespace duckdb
     {
     }
 
-    std::unique_ptr<AirportTakeFlightScanData> scan_data = nullptr;
     mutable mutex lock;
 
     void examine_schema(

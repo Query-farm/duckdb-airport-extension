@@ -94,7 +94,7 @@ namespace duckdb
 
       // Read the schema for the results being returned.
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                               scan_bind_data_->scan_data->stream()->GetSchema(),
+                                               scan_bind_data_->scan_data()->stream()->GetSchema(),
                                                this,
                                                "");
 
