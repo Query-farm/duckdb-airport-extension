@@ -97,7 +97,8 @@ namespace duckdb
                                                               const vector<column_t> &column_ids,
                                                               TableFilterSet *filters,
                                                               atomic<double> *progress,
-                                                              std::shared_ptr<arrow::Buffer> *last_app_metadata);
+                                                              std::shared_ptr<arrow::Buffer> *last_app_metadata,
+                                                              const std::shared_ptr<arrow::Schema> &schema);
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 

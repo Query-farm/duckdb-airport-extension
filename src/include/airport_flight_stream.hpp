@@ -29,15 +29,26 @@ namespace duckdb
   {
     explicit AirportArrowStreamParameters(
         atomic<double> *progress,
-        std::shared_ptr<arrow::Buffer> *last_app_metadata) : ArrowStreamParameters(),
-                                                             progress(progress),
-                                                             last_app_metadata(last_app_metadata)
+        std::shared_ptr<arrow::Buffer> *last_app_metadata,
+        const std::shared_ptr<arrow::Schema> &schema) : ArrowStreamParameters(),
+                                                        progress(progress),
+                                                        last_app_metadata(last_app_metadata),
+                                                        schema_(schema)
     {
+    }
+
+    // The schema of the stream.
+    const std::shared_ptr<arrow::Schema> &schema() const
+    {
+      return schema_;
     }
 
   public:
     atomic<double> *progress = nullptr;
     std::shared_ptr<arrow::Buffer> *last_app_metadata = nullptr;
+
+  private:
+    const std::shared_ptr<arrow::Schema> &schema_;
   };
 
   // This is the structure that is passed to the function that can create the stream.

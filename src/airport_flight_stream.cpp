@@ -97,25 +97,6 @@ namespace duckdb
     std::shared_ptr<arrow::Buffer> *last_app_metadata_;
   };
 
-  static arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> FlightMakeRecordBatchReader(
-      std::shared_ptr<flight::MetadataRecordBatchReader> reader,
-      const AirportLocationDescriptor &location_descriptor,
-      atomic<double> *progress,
-      std::shared_ptr<arrow::Buffer> *last_app_metadata)
-  {
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
-        auto schema,
-        reader->GetSchema(),
-        (&location_descriptor),
-        "Creation of FlightMetadataRecordBatchReaderAdapter");
-    return std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
-        location_descriptor,
-        progress,
-        last_app_metadata,
-        std::move(schema),
-        std::move(reader));
-  }
-
   /// Arrow array stream factory function
   duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>
   AirportCreateStream(uintptr_t buffer_ptr,
@@ -126,21 +107,12 @@ namespace duckdb
     auto buffer_data = reinterpret_cast<AirportTakeFlightScanData *>(buffer_ptr);
     auto airport_parameters = reinterpret_cast<AirportArrowStreamParameters *>(&parameters);
 
-    // We're playing a trick here to recast the FlightStreamReader as a RecordBatchReader,
-    // I'm not sure how else to do this.
-
-    // If this doesn't work I can re-implement the ArrowArrayStreamWrapper
-    // to take a FlightStreamReader instead of a RecordBatchReader.
-
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
-        auto reader,
-        FlightMakeRecordBatchReader(
-            buffer_data->stream(),
-            *buffer_data,
-            airport_parameters->progress,
-            airport_parameters->last_app_metadata),
-        buffer_data,
-        "");
+    auto reader = std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
+        *buffer_data,
+        airport_parameters->progress,
+        airport_parameters->last_app_metadata,
+        airport_parameters->schema(),
+        buffer_data->stream());
 
     // Create arrow stream
     //    auto stream_wrapper = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();

@@ -387,9 +387,10 @@ namespace duckdb
       const vector<column_t> &column_ids,
       TableFilterSet *filters,
       atomic<double> *progress,
-      std::shared_ptr<arrow::Buffer> *last_app_metadata)
+      std::shared_ptr<arrow::Buffer> *last_app_metadata,
+      const std::shared_ptr<arrow::Schema> &schema)
   {
-    AirportArrowStreamParameters parameters(progress, last_app_metadata);
+    AirportArrowStreamParameters parameters(progress, last_app_metadata, schema);
 
     auto &projected = parameters.projected_columns;
     // Preallocate space for efficiency
@@ -410,6 +411,7 @@ namespace duckdb
 
     parameters.filters = filters;
 
+    // RUSTY: replace this.
     return function.scanner_producer(function.stream_factory_ptr, parameters);
   }
 
@@ -634,7 +636,8 @@ namespace duckdb
                                               input.filters.get(),
                                               bind_data.get_progress_counter(0),
                                               // No need for the last metadata message.
-                                              nullptr);
+                                              nullptr,
+                                              bind_data.schema());
 
     return result;
   }
