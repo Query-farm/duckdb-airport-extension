@@ -1023,7 +1023,8 @@ namespace duckdb
             // Can't use progress reporting here.
             nullptr,
             &scan_bind_data->last_app_metadata,
-            scan_bind_data->schema()));
+            scan_bind_data->schema(),
+            *scan_bind_data));
 
     // Retain the global state.
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();

@@ -191,7 +191,8 @@ namespace duckdb
             nullptr,
             nullptr, // No progress reporting.
             &scan_bind_data->last_app_metadata,
-            scan_bind_data->schema()));
+            scan_bind_data->schema(),
+            *scan_bind_data));
 
     // Retain the global state.
     global_state->scan_global_state = std::move(scan_global_state);

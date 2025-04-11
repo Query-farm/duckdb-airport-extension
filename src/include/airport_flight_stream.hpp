@@ -25,19 +25,22 @@ namespace flight = arrow::flight;
 namespace duckdb
 {
 
-  struct AirportArrowStreamParameters : public ArrowStreamParameters
+  struct AirportArrowStreamParameters : public ArrowStreamParameters, public AirportLocationDescriptor
   {
     explicit AirportArrowStreamParameters(
         atomic<double> *progress,
         std::shared_ptr<arrow::Buffer> *last_app_metadata,
-        const std::shared_ptr<arrow::Schema> &schema) : ArrowStreamParameters(),
-                                                        progress(progress),
-                                                        last_app_metadata(last_app_metadata),
-                                                        schema_(schema)
+        const std::shared_ptr<arrow::Schema> &schema,
+        const AirportLocationDescriptor &location_descriptor)
+        : ArrowStreamParameters(),
+          AirportLocationDescriptor(location_descriptor),
+          progress(progress),
+          last_app_metadata(last_app_metadata),
+          schema_(schema)
     {
     }
 
-    // The schema of the stream.
+    // The schema of the stream that will be read.
     const std::shared_ptr<arrow::Schema> &schema() const
     {
       return schema_;

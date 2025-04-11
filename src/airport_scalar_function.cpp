@@ -125,7 +125,8 @@ namespace duckdb
               nullptr,
               // No need for the last metadata message
               nullptr,
-              scan_bind_data_->schema()));
+              scan_bind_data_->schema(),
+              *this));
 
       // There shouldn't be any projection ids.
       vector<idx_t> projection_ids;
