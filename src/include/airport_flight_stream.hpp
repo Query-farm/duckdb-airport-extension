@@ -27,8 +27,17 @@ namespace duckdb
 
   struct AirportArrowStreamParameters : public ArrowStreamParameters
   {
+    explicit AirportArrowStreamParameters(
+        atomic<double> *progress,
+        std::shared_ptr<arrow::Buffer> *last_app_metadata) : ArrowStreamParameters(),
+                                                             progress(progress),
+                                                             last_app_metadata(last_app_metadata)
+    {
+    }
+
   public:
     atomic<double> *progress = nullptr;
+    std::shared_ptr<arrow::Buffer> *last_app_metadata = nullptr;
   };
 
   // This is the structure that is passed to the function that can create the stream.
@@ -59,8 +68,6 @@ namespace duckdb
       stream_ = stream;
     }
 
-    string last_app_metadata_;
-
   private:
     const std::shared_ptr<arrow::Schema> schema_;
     std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
@@ -83,6 +90,10 @@ namespace duckdb
         const string &server_location,
         ClientContext &context,
         TableFunctionBindInput &input);
+
+    AirportTakeFlightParameters(
+        const string &server_location,
+        ClientContext &context);
 
     const string &server_location() const
     {
@@ -144,10 +155,9 @@ namespace duckdb
                                                                                  schema_(schema)
 
     {
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+      AIRPORT_ARROW_ASSERT_OK_CONTAINER(
           ExportSchema(*schema, &schema_root.arrow_schema),
-          take_flight_params_.server_location(),
-          descriptor,
+          this,
           "ExportSchema");
     }
 
@@ -230,6 +240,8 @@ namespace duckdb
       }
       return total / (double_t)total_endpoints_;
     }
+
+    std::shared_ptr<arrow::Buffer> last_app_metadata = nullptr;
 
   private:
     // The total number of endpoints that will be scanned, this is used

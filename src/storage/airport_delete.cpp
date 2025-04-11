@@ -238,7 +238,7 @@ namespace duckdb
     //
 
     {
-      //      auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>(); // FIXME
+      auto &bind_data = gstate.scan_table_function_input->bind_data->Cast<AirportTakeFlightBindData>(); // FIXME
       auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
       auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
@@ -246,12 +246,12 @@ namespace duckdb
 
       state.chunk = global_state.stream()->GetNextChunk();
 
-      if (!gstate.scan_bind_data->scan_data->last_app_metadata_.empty())
-      {
-        auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
+      auto &last_app_metadata = bind_data.last_app_metadata;
 
+      if (last_app_metadata)
+      {
         AIRPORT_MSGPACK_UNPACK(AirportDeleteFinalMetadata, final_metadata,
-                               metadata,
+                               (*last_app_metadata),
                                gstate.table.table_data->server_location(),
                                "Failed to parse msgpack encoded object for final delete metadata.");
         gstate.deleted_count = final_metadata.total_deleted;

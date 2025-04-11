@@ -14,26 +14,11 @@
 #include "airport_request_headers.hpp"
 #include "airport_flight_exception.hpp"
 #include "airport_secrets.hpp"
-
-#include "arrow/array/array_dict.h"
-#include "arrow/array/array_nested.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/buffer.h"
-#include "arrow/io/memory.h"
-#include "arrow/ipc/options.h"
-#include "arrow/ipc/reader.h"
-#include "arrow/ipc/type_fwd.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/record_batch.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type_fwd.h"
-#include "arrow/c/bridge.h"
-
 #include "airport_flight_stream.hpp"
 #include "airport_take_flight.hpp"
 #include "storage/airport_exchange.hpp"
 #include "airport_schema_utils.h"
+
 #include <numeric>
 
 namespace duckdb
@@ -67,18 +52,21 @@ namespace duckdb
         airport_table.table_data,
         "");
 
-    global_state->flight_descriptor = airport_table.table_data->descriptor();
+    const auto &server_location = airport_table.table_data->server_location();
+    const auto &descriptor = airport_table.table_data->descriptor();
 
-    auto auth_token = AirportAuthTokenForLocation(context, airport_table.table_data->server_location(), "", "");
+    global_state->flight_descriptor = descriptor;
+
+    auto auth_token = AirportAuthTokenForLocation(context, server_location, "", "");
 
     D_ASSERT(airport_table.table_data != nullptr);
 
-    auto flight_client = AirportAPI::FlightClientForLocation(airport_table.table_data->server_location());
+    auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
     auto trace_uuid = airport_trace_id();
 
     arrow::flight::FlightCallOptions call_options;
-    airport_add_standard_headers(call_options, airport_table.table_data->server_location());
+    airport_add_standard_headers(call_options, server_location);
     airport_add_authorization_header(call_options, auth_token);
     airport_add_trace_id_header(call_options, trace_uuid);
 
@@ -117,55 +105,45 @@ namespace duckdb
         airport_table.table_data->schema(),
         std::move(exchange_result.reader));
 
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
+                                             scan_data->stream()->GetSchema(),
+                                             airport_table.table_data,
+                                             "");
+
     auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
         (stream_factory_produce_t)&AirportCreateStream,
-        (uintptr_t)scan_data.get());
-
-    scan_bind_data->scan_data = std::move(scan_data);
-    scan_bind_data->server_location = airport_table.table_data->server_location();
-    scan_bind_data->trace_id = trace_uuid;
+        (uintptr_t)scan_data.get(),
+        trace_uuid,
+        -1,
+        AirportTakeFlightParameters(server_location, context),
+        std::nullopt,
+        read_schema,
+        descriptor,
+        std::move(scan_data));
 
     vector<column_t> column_ids;
 
     if (return_chunk)
     {
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                               scan_bind_data->scan_data->stream()->GetSchema(),
-                                               airport_table.table_data,
-                                               "");
-
       // printf("Schema of reader stream is:\n----------\n%s\n---------\n", read_schema->ToString().c_str());
 
-      auto &data = *scan_bind_data;
-      AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-          ExportSchema(*read_schema, &data.schema_root.arrow_schema),
-          airport_table.table_data,
-          "ExportSchema");
-
       vector<string> reading_arrow_column_names;
-      vector<string> arrow_types;
 
-      auto &config = DBConfig::GetConfig(context);
-
-      const auto column_count = (idx_t)data.schema_root.arrow_schema.n_children;
+      const auto column_count = (idx_t)scan_bind_data->schema_root.arrow_schema.n_children;
 
       reading_arrow_column_names.reserve(column_count);
-      arrow_types.reserve(column_count);
 
       for (idx_t col_idx = 0;
            col_idx < column_count; col_idx++)
       {
-        auto &schema = *data.schema_root.arrow_schema.children[col_idx];
-        if (!schema.release)
+        const auto &schema_item = *scan_bind_data->schema_root.arrow_schema.children[col_idx];
+        if (!schema_item.release)
         {
           throw InvalidInputException("airport_exchange: released schema passed");
         }
-        auto name = AirportNameForField(schema.name, col_idx);
+        auto name = AirportNameForField(schema_item.name, col_idx);
 
         reading_arrow_column_names.push_back(name);
-
-        auto arrow_type = ArrowType::GetArrowLogicalType(config, schema);
-        arrow_types.push_back(arrow_type->GetDuckType().ToString());
       }
 
       column_ids.reserve(destination_chunk_column_names.size());
@@ -189,15 +167,7 @@ namespace duckdb
         //        found_index);
       }
 
-      AirportExamineSchema(
-          context,
-          data.schema_root,
-          &data.arrow_table,
-          &data.return_types,
-          &data.names,
-          nullptr,
-          &data.rowid_column_index,
-          true);
+      scan_bind_data->examine_schema(context, true);
     }
 
     // For each index in the arrow table, the column_ids is asked what
@@ -220,8 +190,8 @@ namespace duckdb
             scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
             column_ids,
             nullptr,
-            // No progress reporting.
-            nullptr));
+            nullptr, // No progress reporting.
+            &scan_bind_data->last_app_metadata));
 
     // Retain the global state.
     global_state->scan_global_state = std::move(scan_global_state);

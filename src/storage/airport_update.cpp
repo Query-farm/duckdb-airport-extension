@@ -249,7 +249,7 @@ namespace duckdb
       lstate.read_from_flight_chunk.Reset();
 
       {
-        auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>(); // FIXME
+        auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportExchangeTakeFlightBindData>();
         auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
         auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
@@ -316,7 +316,7 @@ namespace duckdb
         gstate.flight_descriptor, "");
 
     {
-      //      auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>(); // FIXME
+      auto &bind_data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportExchangeTakeFlightBindData>();
       auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
       auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
@@ -324,11 +324,12 @@ namespace duckdb
 
       state.chunk = global_state.stream()->GetNextChunk();
 
-      if (!gstate.scan_bind_data->scan_data->last_app_metadata_.empty())
+      auto &last_app_metadata = bind_data.last_app_metadata;
+
+      if (last_app_metadata)
       {
-        auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
         AIRPORT_MSGPACK_UNPACK(AirportUpdateFinalMetadata, final_metadata,
-                               metadata,
+                               (*last_app_metadata),
                                gstate.table.table_data->server_location(),
                                "Failed to parse msgpack encoded object for final update metadata.");
         gstate.update_count = final_metadata.total_updated;

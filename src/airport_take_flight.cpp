@@ -386,9 +386,10 @@ namespace duckdb
       const ArrowScanFunctionData &function,
       const vector<column_t> &column_ids,
       TableFilterSet *filters,
-      atomic<double> *progress)
+      atomic<double> *progress,
+      std::shared_ptr<arrow::Buffer> *last_app_metadata)
   {
-    AirportArrowStreamParameters parameters;
+    AirportArrowStreamParameters parameters(progress, last_app_metadata);
 
     auto &projected = parameters.projected_columns;
     // Preallocate space for efficiency
@@ -408,8 +409,6 @@ namespace duckdb
     }
 
     parameters.filters = filters;
-
-    parameters.progress = progress;
 
     return function.scanner_producer(function.stream_factory_ptr, parameters);
   }
@@ -634,7 +633,9 @@ namespace duckdb
     result->stream_ = AirportProduceArrowScan(bind_data,
                                               input.column_ids,
                                               input.filters.get(),
-                                              bind_data.get_progress_counter(0));
+                                              bind_data.get_progress_counter(0),
+                                              // No need for the last metadata message.
+                                              nullptr);
 
     return result;
   }

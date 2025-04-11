@@ -39,20 +39,21 @@ namespace duckdb
     {
       const auto trace_id = airport_trace_id();
 
+      auto &server_location = this->server_location();
       // Create the client
-      auto flight_client = AirportAPI::FlightClientForLocation(this->server_location());
+      auto flight_client = AirportAPI::FlightClientForLocation(server_location);
 
       arrow::flight::FlightCallOptions call_options;
 
       // Lookup the auth token from the secret storage.
 
       auto auth_token = AirportAuthTokenForLocation(context,
-                                                    this->server_location(),
+                                                    server_location,
                                                     "", "");
       // FIXME: there may need to be a way for the user to supply the auth token
       // but since scalar functions are defined by the server, just assume the user
       // has the token persisted in their secret store.
-      airport_add_standard_headers(call_options, this->server_location());
+      airport_add_standard_headers(call_options, server_location);
       airport_add_authorization_header(call_options, auth_token);
       airport_add_trace_id_header(call_options, trace_id);
 
@@ -82,9 +83,14 @@ namespace duckdb
 
       scan_bind_data_ = make_uniq<AirportExchangeTakeFlightBindData>(
           (stream_factory_produce_t)&AirportCreateStream,
-          (uintptr_t)scan_data.get());
-
-      scan_bind_data_->scan_data = std::move(scan_data);
+          (uintptr_t)scan_data.get(),
+          trace_id,
+          -1,
+          AirportTakeFlightParameters(server_location, context),
+          std::nullopt,
+          function_output_schema_,
+          this->descriptor(),
+          std::move(scan_data));
 
       // Read the schema for the results being returned.
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
@@ -99,23 +105,11 @@ namespace duckdb
                                   "Schema equality check");
 
       // Convert the Arrow schema to the C format schema.
-      //      auto &data = *scan_bind_data_;
-      AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-          ExportSchema(*read_schema, &scan_bind_data_->schema_root.arrow_schema),
-          this,
-          "ExportSchema");
 
-      AirportExamineSchema(context,
-                           scan_bind_data_->schema_root,
-                           &scan_bind_data_->arrow_table,
-                           &scan_bind_data_->return_types,
-                           &scan_bind_data_->names,
-                           nullptr,
-                           nullptr,
-                           false);
+      scan_bind_data_->examine_schema(context, false);
 
       // There should only be a single output column.
-      D_ASSERT(scan_bind_data_->names.size() == 1);
+      D_ASSERT(scan_bind_data_->names().size() == 1);
 
       writer_ = std::move(exchange_result.writer);
 
@@ -129,6 +123,8 @@ namespace duckdb
               column_ids,
               nullptr,
               // No progress reporting.
+              nullptr,
+              // No need for the last metadata message
               nullptr));
 
       // There shouldn't be any projection ids.
@@ -320,7 +316,7 @@ namespace duckdb
 
     DataChunk returning_data_chunk;
     returning_data_chunk.Initialize(Allocator::Get(context),
-                                    scan_bind_data_->return_types,
+                                    scan_bind_data_->return_types(),
                                     output_size);
 
     returning_data_chunk.SetCardinality(output_size);

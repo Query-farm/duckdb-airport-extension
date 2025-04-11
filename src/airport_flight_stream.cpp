@@ -37,7 +37,7 @@ namespace duckdb
     explicit FlightMetadataRecordBatchReaderAdapter(
         const AirportLocationDescriptor &location_descriptor,
         atomic<double> *progress,
-        string *last_app_metadata,
+        std::shared_ptr<arrow::Buffer> *last_app_metadata,
         const std::shared_ptr<arrow::Schema> &schema,
         std::shared_ptr<flight::MetadataRecordBatchReader> delegate)
         : AirportLocationDescriptor(location_descriptor),
@@ -57,7 +57,7 @@ namespace duckdb
 
           if (last_app_metadata_)
           {
-            *last_app_metadata_ = std::string((const char *)chunk.app_metadata->data(), chunk.app_metadata->size());
+            *last_app_metadata_ = chunk.app_metadata;
           }
 
           // This could be changed later on to be more generic.
@@ -92,15 +92,16 @@ namespace duckdb
   private:
     const std::shared_ptr<arrow::Schema> schema_;
     const std::shared_ptr<flight::MetadataRecordBatchReader> delegate_;
+
     atomic<double> *progress_;
-    string *last_app_metadata_;
+    std::shared_ptr<arrow::Buffer> *last_app_metadata_;
   };
 
   static arrow::Result<std::shared_ptr<arrow::RecordBatchReader>> FlightMakeRecordBatchReader(
       std::shared_ptr<flight::MetadataRecordBatchReader> reader,
       const AirportLocationDescriptor &location_descriptor,
       atomic<double> *progress,
-      string *last_app_metadata)
+      std::shared_ptr<arrow::Buffer> *last_app_metadata)
   {
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto schema,
@@ -137,7 +138,7 @@ namespace duckdb
             buffer_data->stream(),
             *buffer_data,
             airport_parameters->progress,
-            &buffer_data->last_app_metadata_),
+            airport_parameters->last_app_metadata),
         buffer_data,
         "");
 
@@ -171,6 +172,14 @@ namespace duckdb
     } // LCOV_EXCL_STOP
 
     return current_chunk;
+  }
+
+  AirportTakeFlightParameters::AirportTakeFlightParameters(
+      const string &server_location,
+      ClientContext &context) : server_location_(server_location)
+  {
+    D_ASSERT(!server_location_.empty());
+    auth_token_ = AirportAuthTokenForLocation(context, server_location_, secret_name_, auth_token_);
   }
 
   AirportTakeFlightParameters::AirportTakeFlightParameters(

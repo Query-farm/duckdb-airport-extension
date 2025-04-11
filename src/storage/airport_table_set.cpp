@@ -932,16 +932,14 @@ namespace duckdb
   {
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
     const auto trace_uuid = airport_trace_id();
-    const auto &flight_descriptor = bind_data.descriptor();
-    const auto &server_location = bind_data.server_location();
 
     arrow::flight::FlightCallOptions call_options;
     airport_add_normal_headers(call_options,
                                bind_data.take_flight_params(),
                                trace_uuid,
-                               flight_descriptor);
+                               bind_data.descriptor());
 
-    auto auth_token = AirportAuthTokenForLocation(context, server_location, "", "");
+    auto auth_token = AirportAuthTokenForLocation(context, bind_data.server_location(), "", "");
 
     call_options.headers.emplace_back("airport-operation", "table_in_out_function");
 
@@ -952,13 +950,12 @@ namespace duckdb
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", "1");
 
-    auto flight_client = AirportAPI::FlightClientForLocation(server_location);
+    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto exchange_result,
-        flight_client->DoExchange(call_options, flight_descriptor),
-        server_location,
-        flight_descriptor, "");
+        flight_client->DoExchange(call_options, bind_data.descriptor()),
+        &bind_data, "");
 
     // We have the serialized schema that we sent the server earlier so deserialize so we can
     // send it again.
@@ -969,28 +966,25 @@ namespace duckdb
     auto buffer_reader = std::make_shared<arrow::io::BufferReader>(serialized_schema_buffer);
 
     arrow::ipc::DictionaryMemo in_memo;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto send_schema,
         arrow::ipc::ReadSchema(buffer_reader.get(), &in_memo),
-        server_location,
-        flight_descriptor, "ReadSchema");
+        &bind_data, "ReadSchema");
 
     // Send the input set of parameters to the server.
     std::shared_ptr<arrow::Buffer> parameters_buffer = std::make_shared<arrow::Buffer>(
         reinterpret_cast<const uint8_t *>(table_function_parameters.parameters.data()),
         table_function_parameters.parameters.size());
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         exchange_result.writer->WriteMetadata(parameters_buffer),
-        server_location,
-        flight_descriptor,
+        &bind_data,
         "airport_dynamic_table_function: write metadata with parameters");
 
     // Tell the server the schema that we will be using to write data.
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         exchange_result.writer->Begin(send_schema),
-        server_location,
-        flight_descriptor,
+        &bind_data,
         "airport_dynamic_table_function: send schema");
 
     auto scan_data = make_uniq<AirportTakeFlightScanData>(
@@ -998,40 +992,28 @@ namespace duckdb
         bind_data.schema(),
         std::move(exchange_result.reader));
 
-    auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
-        (stream_factory_produce_t)&AirportCreateStream,
-        (uintptr_t)scan_data.get());
-
-    scan_bind_data->scan_data = std::move(scan_data);
-    scan_bind_data->server_location = server_location;
-    scan_bind_data->trace_id = trace_uuid;
-
     vector<column_t> column_ids;
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto read_schema,
-                                                       scan_bind_data->scan_data->stream()->GetSchema(),
-                                                       server_location,
-                                                       flight_descriptor, "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
+                                             scan_data->stream()->GetSchema(),
+                                             &bind_data,
+                                             "");
 
-    auto &data = *scan_bind_data;
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
-        ExportSchema(*read_schema, &data.schema_root.arrow_schema),
-        server_location,
-        flight_descriptor,
-        "ExportSchema");
+    auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
+        (stream_factory_produce_t)&AirportCreateStream,
+        (uintptr_t)scan_data.get(),
+        trace_uuid,
+        -1,
+        bind_data.take_flight_params(),
+        std::nullopt,
+        read_schema,
+        bind_data.descriptor(),
+        std::move(scan_data));
 
     // printf("Arrow schema column names are: %s\n", join_vector_of_strings(reading_arrow_column_names, ',').c_str());
     // printf("Expected order of columns to be: %s\n", join_vector_of_strings(destination_chunk_column_names, ',').c_str());
 
-    AirportExamineSchema(
-        context,
-        data.schema_root,
-        &data.arrow_table,
-        &scan_bind_data->return_types,
-        &scan_bind_data->names,
-        nullptr,
-        &scan_bind_data->rowid_column_index,
-        true);
+    scan_bind_data->examine_schema(context, true);
 
     // There shouldn't be any projection ids.
     vector<idx_t> projection_ids;
@@ -1042,7 +1024,8 @@ namespace duckdb
             column_ids,
             nullptr,
             // Can't use progress reporting here.
-            nullptr));
+            nullptr,
+            &scan_bind_data->last_app_metadata));
 
     // Retain the global state.
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();
@@ -1101,17 +1084,17 @@ namespace duckdb
     appender->Append(input, 0, input.size(), input.size());
     ArrowArray arr = appender->Finalize();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, global_state.schema),
-        global_state.scan_bind_data->server_location,
-        global_state.flight_descriptor, "airport_dynamic_table_function: import record batch");
+        global_state.scan_bind_data,
+        "airport_dynamic_table_function: import record batch");
 
     // Now send it
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         global_state.writer->WriteRecordBatch(*record_batch),
-        global_state.scan_bind_data->server_location,
-        global_state.flight_descriptor, "airport_dynamic_table_function: write record batch");
+        global_state.scan_bind_data,
+        "airport_dynamic_table_function: write record batch");
 
     // The server could produce results, so we should read them.
     //
@@ -1149,11 +1132,12 @@ namespace duckdb
                                                                    DataChunk &output)
   {
     auto &global_state = data_p.global_state->Cast<AirportDynamicTableInOutGlobalState>();
+    const arrow::Buffer finished_buffer("finished");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         global_state.writer->DoneWriting(),
-        global_state.scan_bind_data->server_location,
-        global_state.flight_descriptor, "airport_dynamic_table_function: finalize done writing");
+        global_state.scan_bind_data,
+        "airport_dynamic_table_function: finalize done writing");
 
     bool is_finished = false;
     {
@@ -1164,8 +1148,8 @@ namespace duckdb
 
       state.chunk = global_state2.stream()->GetNextChunk();
 
-      auto &last_app_metadata = global_state.scan_bind_data->scan_data->last_app_metadata_;
-      if (last_app_metadata == "finished")
+      auto &last_app_metadata = data.last_app_metadata;
+      if (last_app_metadata && last_app_metadata->Equals(finished_buffer))
       {
         is_finished = true;
       }

@@ -357,21 +357,20 @@ namespace duckdb
         gstate.flight_descriptor, "");
 
     {
-      //      auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>(); // FIXME
+      auto &bind_data = gstate.scan_table_function_input->bind_data->Cast<AirportTakeFlightBindData>(); // FIXME
       auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
       auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
       state.Reset();
 
       state.chunk = global_state.stream()->GetNextChunk();
+      auto &last_app_metadata = bind_data.last_app_metadata;
 
-      if (!gstate.scan_bind_data->scan_data->last_app_metadata_.empty())
+      if (last_app_metadata)
       {
-        auto metadata = *&gstate.scan_bind_data->scan_data->last_app_metadata_;
-
         AIRPORT_MSGPACK_UNPACK(
             AirportInsertFinalMetadata, final_metadata,
-            metadata,
+            (*last_app_metadata),
             gstate.table->table_data->server_location(),
             "Failed to parse msgpack encoded object for final insert metadata.");
         gstate.insert_count = final_metadata.total_inserted;

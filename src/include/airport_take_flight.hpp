@@ -96,7 +96,8 @@ namespace duckdb
   unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(const ArrowScanFunctionData &function,
                                                               const vector<column_t> &column_ids,
                                                               TableFilterSet *filters,
-                                                              atomic<double> *progress);
+                                                              atomic<double> *progress,
+                                                              std::shared_ptr<arrow::Buffer> *last_app_metadata);
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 
