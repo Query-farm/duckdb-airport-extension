@@ -118,12 +118,12 @@ namespace duckdb
 
       auto info_schema = table.schema();
 
-      auto &server_location = airport_catalog.attach_parameters()->location();
+      const auto &server_location = airport_catalog.attach_parameters()->location();
 
       ArrowSchema arrow_schema;
 
-      AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*info_schema, &arrow_schema),
-                                                  server_location, table.descriptor(), "ExportSchema");
+      AIRPORT_ARROW_ASSERT_OK_CONTAINER(ExportSchema(*info_schema, &arrow_schema),
+                                        &table, "ExportSchema");
 
       vector<string> column_names;
       vector<duckdb::LogicalType> return_types;
@@ -415,19 +415,21 @@ namespace duckdb
 
     // FIXME: need to extract the rowid type from the schema, I think there is function that does this.
 
+    AirportLocationDescriptor table_location(
+        server_location,
+        flight_info->descriptor());
+
     std::shared_ptr<arrow::Schema> info_schema;
     arrow::ipc::DictionaryMemo dictionary_memo;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(info_schema,
-                                                       flight_info->GetSchema(&dictionary_memo),
-                                                       server_location,
-                                                       flight_info->descriptor(),
-                                                       "");
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(info_schema,
+                                             flight_info->GetSchema(&dictionary_memo),
+                                             &table_location,
+                                             "");
 
     auto rowid_type = AirportAPI::GetRowIdType(
         context,
         info_schema,
-        server_location,
-        flight_info->descriptor());
+        table_location);
 
     // FIXME: check to make sure the rowid column is the correct type, this seems to be missing here.
     auto table_entry = make_uniq<AirportTableEntry>(catalog, this->schema, base, rowid_type);
@@ -439,8 +441,7 @@ namespace duckdb
     created_table_metadata.comment = "";
 
     // This uses a special constructor because we don't have the parsing from the Catalog its custom Created
-    table_entry->table_data = make_uniq<AirportAPITable>(server_location,
-                                                         flight_info->descriptor(),
+    table_entry->table_data = make_uniq<AirportAPITable>(table_location,
                                                          AirportAPIObjectBase::GetSchema(server_location, *flight_info),
                                                          created_table_metadata);
 
@@ -586,9 +587,8 @@ namespace duckdb
                                           duckdb::FunctionStability::VOLATILE,
                                           duckdb::FunctionNullHandling::DEFAULT_NULL_HANDLING,
                                           nullptr);
-        scalar_func.function_info = make_uniq<AirportScalarFunctionInfo>(function.server_location(),
-                                                                         function.name(),
-                                                                         function.descriptor(),
+        scalar_func.function_info = make_uniq<AirportScalarFunctionInfo>(function.name(),
+                                                                         function,
                                                                          function.schema(),
                                                                          function.input_schema());
 
@@ -853,15 +853,13 @@ namespace duckdb
   AirportSchemaToLogicalTypesWithNaming(
       ClientContext &context,
       std::shared_ptr<arrow::Schema> schema,
-      const string &server_location,
-      const flight::FlightDescriptor &flight_descriptor)
+      const AirportLocationDescriptor &location_descriptor)
   {
     ArrowSchemaWrapper schema_root;
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         ExportSchema(*schema, &schema_root.arrow_schema),
-        server_location,
-        flight_descriptor,
+        &location_descriptor,
         "ExportSchema");
 
     ArrowSchemaTableFunctionTypes result;
@@ -1215,7 +1213,7 @@ namespace duckdb
         // These input types are available since they are specified in the metadata, but the
         // schema that is returned likely should be requested dynamically from the dynamic
         // flight function.
-        auto input_types = AirportSchemaToLogicalTypesWithNaming(context, function.input_schema(), function.location(), function.descriptor());
+        auto input_types = AirportSchemaToLogicalTypesWithNaming(context, function.input_schema(), function);
 
         // Determine if we have a table input.
         bool has_table_input = false;

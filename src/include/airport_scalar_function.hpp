@@ -22,19 +22,6 @@ namespace duckdb
     const std::shared_ptr<arrow::Schema> input_schema_;
 
   public:
-    AirportScalarFunctionInfo(const string &location,
-                              const string &name,
-                              const flight::FlightDescriptor &flight_descriptor,
-                              const std::shared_ptr<arrow::Schema> &output_schema,
-                              const std::shared_ptr<arrow::Schema> &input_schema)
-        : ScalarFunctionInfo(),
-          AirportLocationDescriptor(location, flight_descriptor),
-          function_name_(name),
-          output_schema_(output_schema),
-          input_schema_(input_schema)
-    {
-    }
-
     AirportScalarFunctionInfo(
         const string &name,
         const AirportLocationDescriptor &location,

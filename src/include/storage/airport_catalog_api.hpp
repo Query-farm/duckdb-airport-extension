@@ -144,11 +144,10 @@ namespace duckdb
             std::make_shared<arrow::Buffer>(serialized_schema));
 
         arrow::ipc::DictionaryMemo in_memo;
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
             auto parameter_schema,
             arrow::ipc::ReadSchema(&parameter_schema_reader, &in_memo),
-            server_location,
-            descriptor,
+            this,
             "Read serialized input schema");
 
         input_schema_ = parameter_schema;
@@ -239,6 +238,18 @@ namespace duckdb
               descriptor,
               schema,
               server_location,
+              parsed_app_metadata)
+    {
+    }
+
+    AirportAPITable(
+        const AirportLocationDescriptor &location_descriptor,
+        const std::shared_ptr<arrow::Schema> &schema,
+        const AirportSerializedFlightAppMetadata &parsed_app_metadata)
+        : AirportAPIObjectBase(
+              location_descriptor.descriptor(),
+              schema,
+              location_descriptor.server_location(),
               parsed_app_metadata)
     {
     }
@@ -412,8 +423,7 @@ namespace duckdb
     // The the rowid column type, LogicalType::INVALID if none is present.
     static LogicalType GetRowIdType(ClientContext &context,
                                     const std::shared_ptr<arrow::Schema> &schema,
-                                    const string &location,
-                                    const arrow::flight::FlightDescriptor &descriptor);
+                                    const AirportLocationDescriptor &location_descriptor);
   };
 
 } // namespace duckdb

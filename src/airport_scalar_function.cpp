@@ -119,7 +119,7 @@ namespace duckdb
       // So you need some endpoints here.
       scan_global_state_ = make_uniq<AirportArrowScanGlobalState>(
           AirportProduceArrowScan(
-              scan_bind_data_->CastNoConst<AirportTakeFlightBindData>(),
+              *scan_bind_data_,
               column_ids,
               nullptr,
               // No progress reporting.

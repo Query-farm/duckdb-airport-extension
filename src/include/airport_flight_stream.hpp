@@ -173,6 +173,8 @@ namespace duckdb
     // Get shouldn't actually produce any rows.
     //
     // Its assumed that the work will be done in the LogicalUpdate or LogicalDelete
+    //
+    // This will only be modified by the AirportOptimizer.
     bool skip_producing_result_for_update_or_delete = false;
 
     const string &trace_id() const

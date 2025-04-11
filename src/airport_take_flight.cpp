@@ -558,8 +558,7 @@ namespace duckdb
           auto rowid_type = AirportAPI::GetRowIdType(
               context,
               bind_data.schema(),
-              bind_data.server_location(),
-              bind_data.descriptor());
+              bind_data);
           scanned_types.emplace_back(rowid_type);
         }
         else

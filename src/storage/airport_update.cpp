@@ -93,7 +93,7 @@ namespace duckdb
 
     ColumnDataCollection return_collection;
 
-    bool return_chunk;
+    const bool return_chunk;
   };
 
   class AirportUpdateLocalState : public LocalSinkState

@@ -500,7 +500,7 @@ namespace duckdb
   {
     auto contents = make_uniq<AirportSchemaContents>();
 
-    auto &server_location = credentials->location();
+    const auto &server_location = credentials->location();
 
     // So the value can be provided by an external URL or inline, but either way
     // we must have a SHA256 provided, because if the overall catalog populated the
@@ -589,15 +589,13 @@ namespace duckdb
   LogicalType
   AirportAPI::GetRowIdType(ClientContext &context,
                            const std::shared_ptr<arrow::Schema> &schema,
-                           const string &location,
-                           const arrow::flight::FlightDescriptor &descriptor)
+                           const AirportLocationDescriptor &location_descriptor)
   {
     ArrowSchemaWrapper schema_root;
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(ExportSchema(*schema,
-                                                             &schema_root.arrow_schema),
-                                                location,
-                                                descriptor,
-                                                "ExportSchema");
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(ExportSchema(*schema,
+                                                   &schema_root.arrow_schema),
+                                      &location_descriptor,
+                                      "ExportSchema");
     auto &config = DBConfig::GetConfig(context);
 
     const auto number_of_columns = (idx_t)schema_root.arrow_schema.n_children;
