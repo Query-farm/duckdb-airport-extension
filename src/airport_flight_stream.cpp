@@ -39,7 +39,7 @@ namespace duckdb
         atomic<double> *progress,
         std::shared_ptr<arrow::Buffer> *last_app_metadata,
         const std::shared_ptr<arrow::Schema> &schema,
-        std::shared_ptr<flight::MetadataRecordBatchReader> delegate)
+        std::shared_ptr<flight::FlightStreamReader> delegate)
         : AirportLocationDescriptor(location_descriptor),
           schema_(std::move(schema)),
           delegate_(std::move(delegate)),
@@ -91,7 +91,7 @@ namespace duckdb
 
   private:
     const std::shared_ptr<arrow::Schema> schema_;
-    const std::shared_ptr<flight::MetadataRecordBatchReader> delegate_;
+    const std::shared_ptr<flight::FlightStreamReader> delegate_;
 
     atomic<double> *progress_;
     std::shared_ptr<arrow::Buffer> *last_app_metadata_;
@@ -104,7 +104,7 @@ namespace duckdb
   {
     assert(buffer_ptr != 0);
 
-    auto buffer_data = reinterpret_cast<AirportTakeFlightScanData *>(buffer_ptr);
+    auto bind_data = reinterpret_cast<AirportTakeFlightBindData *>(buffer_ptr);
     auto airport_parameters = reinterpret_cast<AirportArrowStreamParameters *>(&parameters);
 
     auto reader = std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
@@ -112,7 +112,7 @@ namespace duckdb
         airport_parameters->progress,
         airport_parameters->last_app_metadata,
         airport_parameters->schema(),
-        buffer_data->stream());
+        bind_data->reader());
 
     // Create arrow stream
     //    auto stream_wrapper = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();

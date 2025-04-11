@@ -103,13 +103,8 @@ namespace duckdb
 
     // Get the information about the flight, this will allow the
     // endpoint information to be returned.
-    unique_ptr<AirportTakeFlightScanData> scan_data;
 
-    if (schema != nullptr)
-    {
-      scan_data = make_uniq<AirportTakeFlightScanData>(nullptr);
-    }
-    else
+    if (schema == nullptr)
     {
       std::unique_ptr<arrow::flight::FlightInfo> retrieved_flight_info;
       auto flight_client = AirportAPI::FlightClientForLocation(server_location);
@@ -157,20 +152,17 @@ namespace duckdb
                                                          server_location,
                                                          descriptor,
                                                          "");
-
-      scan_data = make_uniq<AirportTakeFlightScanData>(nullptr);
     }
 
     auto ret = make_uniq<AirportTakeFlightBindData>(
         (stream_factory_produce_t)&AirportCreateStream,
-        (uintptr_t)scan_data.get(),
         trace_uuid,
         estimated_records,
         take_flight_params,
         table_function_parameters,
         schema,
         descriptor,
-        std::move(scan_data));
+        nullptr);
 
     AirportExamineSchema(context,
                          ret->schema_root,
@@ -628,7 +620,7 @@ namespace duckdb
     // FIXME: make sure that the schema returned from the server is the same as
     // what we were expecting.
 
-    bind_data.scan_data()->setStream(std::move(stream));
+    bind_data.set_reader(std::move(stream));
 
     result->stream_ = AirportProduceArrowScan(bind_data,
                                               input.column_ids,

@@ -76,23 +76,19 @@ namespace duckdb
           this,
           "Begin schema");
 
-      auto scan_data = make_uniq<AirportTakeFlightScanData>(
-          std::move(exchange_result.reader));
-
       scan_bind_data_ = make_uniq<AirportExchangeTakeFlightBindData>(
           (stream_factory_produce_t)&AirportCreateStream,
-          (uintptr_t)scan_data.get(),
           trace_id,
           -1,
           AirportTakeFlightParameters(server_location, context),
           std::nullopt,
           function_output_schema_,
           this->descriptor(),
-          std::move(scan_data));
+          std::move(exchange_result.reader));
 
       // Read the schema for the results being returned.
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                               scan_bind_data_->scan_data()->stream()->GetSchema(),
+                                               scan_bind_data_->reader()->GetSchema(),
                                                this,
                                                "");
 

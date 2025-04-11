@@ -14,15 +14,15 @@ namespace duckdb
   {
 
   public:
-    explicit AirportExchangeTakeFlightBindData(stream_factory_produce_t scanner_producer_p, uintptr_t stream_factory_ptr_p,
+    explicit AirportExchangeTakeFlightBindData(stream_factory_produce_t scanner_producer_p,
                                                const string &trace_id,
                                                const int64_t estimated_records,
                                                const AirportTakeFlightParameters &take_flight_params_p,
                                                const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
                                                std::shared_ptr<arrow::Schema> schema,
                                                const flight::FlightDescriptor &descriptor,
-                                               std::unique_ptr<AirportTakeFlightScanData> scan_data_p,
-                                               shared_ptr<DependencyItem> dependency = nullptr) : AirportTakeFlightBindData(scanner_producer_p, stream_factory_ptr_p, trace_id, estimated_records, take_flight_params_p, table_function_parameters_p, schema, descriptor, std::move(scan_data_p), std::move(dependency))
+                                               std::shared_ptr<arrow::flight::FlightStreamReader> reader,
+                                               shared_ptr<DependencyItem> dependency = nullptr) : AirportTakeFlightBindData(scanner_producer_p, trace_id, estimated_records, take_flight_params_p, table_function_parameters_p, schema, descriptor, std::move(reader), std::move(dependency))
     {
     }
 

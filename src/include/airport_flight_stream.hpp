@@ -54,29 +54,6 @@ namespace duckdb
     const std::shared_ptr<arrow::Schema> &schema_;
   };
 
-  // This is the structure that is passed to the function that can create the stream.
-  struct AirportTakeFlightScanData
-  {
-  public:
-    explicit AirportTakeFlightScanData(
-        const std::shared_ptr<flight::FlightStreamReader> &stream) : stream_(stream)
-    {
-    }
-
-    const std::shared_ptr<arrow::flight::FlightStreamReader> stream() const
-    {
-      return stream_;
-    }
-
-    void setStream(std::shared_ptr<arrow::flight::FlightStreamReader> stream)
-    {
-      stream_ = stream;
-    }
-
-  private:
-    std::shared_ptr<arrow::flight::FlightStreamReader> stream_;
-  };
-
   struct AirportGetFlightInfoTableFunctionParameters
   {
     std::string schema_name;
@@ -142,20 +119,20 @@ namespace duckdb
   struct AirportTakeFlightBindData : public ArrowScanFunctionData, public AirportLocationDescriptor
   {
   public:
-    AirportTakeFlightBindData(stream_factory_produce_t scanner_producer_p, uintptr_t stream_factory_ptr_p,
+    AirportTakeFlightBindData(stream_factory_produce_t scanner_producer_p,
                               const string &trace_id,
                               const int64_t estimated_records,
                               const AirportTakeFlightParameters &take_flight_params_p,
                               const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
                               std::shared_ptr<arrow::Schema> schema,
                               const flight::FlightDescriptor &descriptor,
-                              std::unique_ptr<AirportTakeFlightScanData> scan_data_p,
-                              shared_ptr<DependencyItem> dependency = nullptr) : ArrowScanFunctionData(scanner_producer_p, stream_factory_ptr_p, std::move(dependency)),
+                              std::shared_ptr<arrow::flight::FlightStreamReader> reader,
+                              shared_ptr<DependencyItem> dependency = nullptr) : ArrowScanFunctionData(scanner_producer_p, (uintptr_t)this, std::move(dependency)),
                                                                                  AirportLocationDescriptor(take_flight_params_p.server_location(), descriptor),
                                                                                  trace_id_(trace_id), estimated_records_(estimated_records),
                                                                                  take_flight_params_(take_flight_params_p),
                                                                                  table_function_parameters_(table_function_parameters_p),
-                                                                                 scan_data_(std::move(scan_data_p)),
+                                                                                 reader_(std::move(reader)),
                                                                                  schema_(schema)
 
     {
@@ -201,9 +178,14 @@ namespace duckdb
       return table_function_parameters_;
     }
 
-    const std::unique_ptr<AirportTakeFlightScanData> &scan_data() const
+    const std::shared_ptr<arrow::flight::FlightStreamReader> &reader() const
     {
-      return scan_data_;
+      return reader_;
+    }
+
+    void set_reader(std::unique_ptr<arrow::flight::FlightStreamReader> reader)
+    {
+      reader_ = std::move(reader);
     }
 
     const std::shared_ptr<arrow::Schema> &schema() const
@@ -266,7 +248,7 @@ namespace duckdb
     const AirportTakeFlightParameters take_flight_params_;
     const std::optional<AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
 
-    std::unique_ptr<AirportTakeFlightScanData> scan_data_;
+    std::shared_ptr<arrow::flight::FlightStreamReader> reader_;
     const std::shared_ptr<arrow::Schema> schema_;
   };
 

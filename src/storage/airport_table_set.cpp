@@ -985,26 +985,22 @@ namespace duckdb
         &bind_data,
         "airport_dynamic_table_function: send schema");
 
-    auto scan_data = make_uniq<AirportTakeFlightScanData>(
-        std::move(exchange_result.reader));
-
     vector<column_t> column_ids;
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                             scan_data->stream()->GetSchema(),
+                                             exchange_result.reader->GetSchema(),
                                              &bind_data,
                                              "");
 
     auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
         (stream_factory_produce_t)&AirportCreateStream,
-        (uintptr_t)scan_data.get(),
         trace_uuid,
         -1,
         bind_data.take_flight_params(),
         std::nullopt,
         read_schema,
         bind_data.descriptor(),
-        std::move(scan_data));
+        std::move(exchange_result.reader));
 
     // printf("Arrow schema column names are: %s\n", join_vector_of_strings(reading_arrow_column_names, ',').c_str());
     // printf("Expected order of columns to be: %s\n", join_vector_of_strings(destination_chunk_column_names, ',').c_str());
