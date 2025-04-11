@@ -65,8 +65,7 @@ namespace duckdb
   class AirportExchangeGlobalState
   {
   public:
-    std::shared_ptr<arrow::Schema> schema;
-    arrow::flight::FlightDescriptor flight_descriptor;
+    std::shared_ptr<arrow::Schema> send_schema;
 
     std::unique_ptr<AirportExchangeTakeFlightBindData> scan_bind_data;
     std::unique_ptr<ArrowArrayStreamWrapper> reader;

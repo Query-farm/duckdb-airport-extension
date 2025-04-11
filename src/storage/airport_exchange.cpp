@@ -47,7 +47,7 @@ namespace duckdb
                                          const std::optional<string> transaction_id)
   {
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
-        global_state->schema,
+        global_state->send_schema,
         arrow::ImportSchema((ArrowSchema *)&send_schema),
         airport_table.table_data,
         "");
@@ -55,7 +55,7 @@ namespace duckdb
     const auto &server_location = airport_table.table_data->server_location();
     const auto &descriptor = airport_table.table_data->descriptor();
 
-    global_state->flight_descriptor = descriptor;
+    // global_state->flight_descriptor = descriptor;
 
     auto auth_token = AirportAuthTokenForLocation(context, server_location, "", "");
 
@@ -81,16 +81,16 @@ namespace duckdb
     // Indicate if the caller is interested in data being returned.
     call_options.headers.emplace_back("return-chunks", return_chunk ? "1" : "0");
 
-    airport_add_flight_path_header(call_options, global_state->flight_descriptor);
+    airport_add_flight_path_header(call_options, descriptor);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto exchange_result,
-        flight_client->DoExchange(call_options, global_state->flight_descriptor),
+        flight_client->DoExchange(call_options, descriptor),
         airport_table.table_data, "");
 
     // Tell the server the schema that we will be using to write data.
     AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-        exchange_result.writer->Begin(global_state->schema),
+        exchange_result.writer->Begin(global_state->send_schema),
         airport_table.table_data,
         "Begin schema");
 

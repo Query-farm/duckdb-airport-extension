@@ -165,7 +165,7 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
-        arrow::ImportRecordBatch(&arr, gstate.schema),
+        arrow::ImportRecordBatch(&arr, gstate.send_schema),
         gstate.table.table_data,
         "");
 
@@ -225,12 +225,10 @@ namespace duckdb
     auto &gstate = input.global_state.Cast<AirportDeleteGlobalState>();
 
     // printf("AirportDelete::Finalize started, indicating that writing is done\n");
-    auto flight_descriptor = gstate.table.table_data->descriptor();
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         gstate.writer->DoneWriting(),
-        gstate.table.table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table.table_data, "");
 
     // There should be a metadata message in the reader stream
     // but the problem is the current interface just reads data

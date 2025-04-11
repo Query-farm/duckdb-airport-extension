@@ -61,25 +61,21 @@ namespace duckdb
   public:
     explicit AirportInsertGlobalState(
         ClientContext &context,
-        AirportTableEntry *table,
+        AirportTableEntry &table,
         const vector<LogicalType> &return_types,
         bool return_chunk)
         : table(table), insert_count(0),
           return_collection(context, return_types), return_chunk(return_chunk)
     {
-      if (!table)
-      {
-        throw NotImplementedException("AirportInsertGlobalState: table is null");
-      }
     }
 
-    AirportTableEntry *table;
+    AirportTableEntry &table;
     idx_t insert_count;
     mutex insert_lock;
 
     ColumnDataCollection return_collection;
 
-    bool return_chunk;
+    const bool return_chunk;
   };
 
   class AirportInsertLocalState : public LocalSinkState
@@ -161,7 +157,7 @@ namespace duckdb
       table = &insert_table.get_mutable()->Cast<AirportTableEntry>();
     }
 
-    auto insert_global_state = make_uniq<AirportInsertGlobalState>(context, table.get(), GetTypes(), return_chunk);
+    auto insert_global_state = make_uniq<AirportInsertGlobalState>(context, *table, GetTypes(), return_chunk);
 
     const auto &transaction = AirportTransaction::Get(context, insert_table->catalog);
     // auto &connection = transaction.GetConnection();
@@ -279,10 +275,10 @@ namespace duckdb
 
     // So this is going to write the data into the returning_data_chunk
     // which has all table columns.
-    AirportInsert::ResolveDefaults(*gstate.table, chunk, column_index_map, ustate.default_executor, ustate.returning_data_chunk);
+    AirportInsert::ResolveDefaults(gstate.table, chunk, column_index_map, ustate.default_executor, ustate.returning_data_chunk);
 
     // So there is some confusion about which columns are at a particular index.
-    OnConflictHandling(*gstate.table, context, gstate, ustate, ustate.returning_data_chunk);
+    OnConflictHandling(gstate.table, context, gstate, ustate, ustate.returning_data_chunk);
 
     auto appender = make_uniq<ArrowAppender>(gstate.send_types, ustate.returning_data_chunk.size(), context.client.GetClientProperties(),
                                              ArrowTypeExtensionData::GetExtensionTypes(
@@ -292,8 +288,8 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
-        arrow::ImportRecordBatch(&arr, gstate.schema),
-        gstate.table->table_data, "");
+        arrow::ImportRecordBatch(&arr, gstate.send_schema),
+        gstate.table.table_data, "");
 
     // Acquire a lock because we don't want other threads to be writing to the same streams
     // at the same time.
@@ -301,7 +297,7 @@ namespace duckdb
 
     AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         gstate.writer->WriteRecordBatch(*record_batch),
-        gstate.table->table_data, "");
+        gstate.table.table_data, "");
 
     // Since we wrote a batch I'd like to read the data returned if we are returning chunks.
     if (gstate.return_chunk)
@@ -349,12 +345,10 @@ namespace duckdb
     auto &gstate = input.global_state.Cast<AirportInsertGlobalState>();
 
     // printf("AirportDelete::Finalize started, indicating that writing is done\n");
-    auto flight_descriptor = gstate.table->table_data->descriptor();
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         gstate.writer->DoneWriting(),
-        gstate.table->table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table.table_data, "");
 
     {
       auto &bind_data = gstate.scan_table_function_input->bind_data->Cast<AirportTakeFlightBindData>(); // FIXME
@@ -371,7 +365,7 @@ namespace duckdb
         AIRPORT_MSGPACK_UNPACK(
             AirportInsertFinalMetadata, final_metadata,
             (*last_app_metadata),
-            gstate.table->table_data->server_location(),
+            gstate.table.table_data->server_location(),
             "Failed to parse msgpack encoded object for final insert metadata.");
         gstate.insert_count = final_metadata.total_inserted;
       }

@@ -1031,7 +1031,7 @@ namespace duckdb
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();
 
     global_state->scan_global_state = std::move(scan_global_state);
-    global_state->schema = send_schema;
+    global_state->send_schema = send_schema;
 
     // Now simulate the init input.
     auto fake_init_input = TableFunctionInitInput(
@@ -1086,7 +1086,7 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
-        arrow::ImportRecordBatch(&arr, global_state.schema),
+        arrow::ImportRecordBatch(&arr, global_state.send_schema),
         global_state.scan_bind_data,
         "airport_dynamic_table_function: import record batch");
 

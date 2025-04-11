@@ -235,7 +235,7 @@ namespace duckdb
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
-        arrow::ImportRecordBatch(&arr, gstate.schema),
+        arrow::ImportRecordBatch(&arr, gstate.send_schema),
         gstate.table.table_data, "");
 
     AIRPORT_ARROW_ASSERT_OK_CONTAINER(
@@ -307,13 +307,9 @@ namespace duckdb
   {
     auto &gstate = input.global_state.Cast<AirportUpdateGlobalState>();
 
-    // printf("AirportDelete::Finalize started, indicating that writing is done\n");
-    auto flight_descriptor = gstate.table.table_data->descriptor();
-
-    AIRPORT_ARROW_ASSERT_OK_LOCATION_DESCRIPTOR(
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
         gstate.writer->DoneWriting(),
-        gstate.table.table_data->server_location(),
-        gstate.flight_descriptor, "");
+        gstate.table.table_data, "");
 
     {
       auto &bind_data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportExchangeTakeFlightBindData>();
