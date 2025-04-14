@@ -1000,7 +1000,7 @@ namespace duckdb
         std::nullopt,
         read_schema,
         bind_data.descriptor(),
-        std::move(exchange_result.reader));
+        nullptr);
 
     // printf("Arrow schema column names are: %s\n", join_vector_of_strings(reading_arrow_column_names, ',').c_str());
     // printf("Expected order of columns to be: %s\n", join_vector_of_strings(destination_chunk_column_names, ',').c_str());
@@ -1010,16 +1010,7 @@ namespace duckdb
     // There shouldn't be any projection ids.
     vector<idx_t> projection_ids;
 
-    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(
-        AirportProduceArrowScan(
-            scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
-            column_ids,
-            nullptr,
-            // Can't use progress reporting here.
-            nullptr,
-            &scan_bind_data->last_app_metadata,
-            scan_bind_data->schema(),
-            *scan_bind_data));
+    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>();
 
     // Retain the global state.
     unique_ptr<AirportDynamicTableInOutGlobalState> global_state = make_uniq<AirportDynamicTableInOutGlobalState>();
@@ -1037,7 +1028,23 @@ namespace duckdb
     // Local init.
 
     auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
+    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(
+        std::move(current_chunk),
+        context,
+        std::move(exchange_result.reader),
+        fake_init_input);
+    scan_local_state->set_stream(
+        AirportProduceArrowScan(
+            scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
+            column_ids,
+            nullptr,
+            // Can't use progress reporting here.
+            nullptr,
+            &scan_bind_data->last_app_metadata,
+            scan_bind_data->schema(),
+            *scan_bind_data,
+            *scan_local_state));
+
     scan_local_state->column_ids = fake_init_input.column_ids;
     scan_local_state->filters = fake_init_input.filters.get();
 
@@ -1101,9 +1108,9 @@ namespace duckdb
     {
       auto &data = global_state.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>();
       auto &state = global_state.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
-      auto &global_state2 = global_state.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
+      //      auto &global_state2 = global_state.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
-      state.chunk = global_state2.stream()->GetNextChunk();
+      state.chunk = state.stream()->GetNextChunk();
 
       auto output_size =
           MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
@@ -1138,9 +1145,9 @@ namespace duckdb
       auto &scan_data = global_state.scan_table_function_input;
       auto &data = scan_data->bind_data->CastNoConst<AirportTakeFlightBindData>();
       auto &state = scan_data->local_state->Cast<AirportArrowScanLocalState>();
-      auto &global_state2 = scan_data->global_state->Cast<AirportArrowScanGlobalState>();
+      //      auto &global_state2 = scan_data->global_state->Cast<AirportArrowScanGlobalState>();
 
-      state.chunk = global_state2.stream()->GetNextChunk();
+      state.chunk = state.stream()->GetNextChunk();
 
       auto &last_app_metadata = data.last_app_metadata;
       if (last_app_metadata && last_app_metadata->Equals(finished_buffer))

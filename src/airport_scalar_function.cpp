@@ -83,12 +83,11 @@ namespace duckdb
           AirportTakeFlightParameters(server_location, context),
           std::nullopt,
           function_output_schema_,
-          this->descriptor(),
-          std::move(exchange_result.reader));
+          this->descriptor());
 
       // Read the schema for the results being returned.
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                               scan_bind_data_->reader()->GetSchema(),
+                                               exchange_result.reader->GetSchema(),
                                                this,
                                                "");
 
@@ -111,17 +110,7 @@ namespace duckdb
       vector<column_t> column_ids = {0};
 
       // So you need some endpoints here.
-      scan_global_state_ = make_uniq<AirportArrowScanGlobalState>(
-          AirportProduceArrowScan(
-              *scan_bind_data_,
-              column_ids,
-              nullptr,
-              // No progress reporting.
-              nullptr,
-              // No need for the last metadata message
-              nullptr,
-              scan_bind_data_->schema(),
-              *this));
+      scan_global_state_ = make_uniq<AirportArrowScanGlobalState>();
 
       // There shouldn't be any projection ids.
       vector<idx_t> projection_ids;
@@ -133,7 +122,22 @@ namespace duckdb
           nullptr);
 
       auto current_chunk = make_uniq<ArrowArrayWrapper>();
-      scan_local_state_ = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
+      scan_local_state_ = make_uniq<AirportArrowScanLocalState>(
+          std::move(current_chunk),
+          context,
+          std::move(exchange_result.reader), fake_init_input);
+      scan_local_state_->set_stream(
+          AirportProduceArrowScan(
+              *scan_bind_data_,
+              column_ids,
+              nullptr,
+              // No progress reporting.
+              nullptr,
+              // No need for the last metadata message
+              nullptr,
+              scan_bind_data_->schema(),
+              *this,
+              *scan_local_state_));
       scan_local_state_->column_ids = fake_init_input.column_ids;
       scan_local_state_->filters = fake_init_input.filters.get();
     }
@@ -305,7 +309,7 @@ namespace duckdb
 
     scan_local_state_->Reset();
 
-    scan_local_state_->chunk = scan_global_state_->stream()->GetNextChunk();
+    scan_local_state_->chunk = scan_local_state_->stream()->GetNextChunk();
 
     auto output_size =
         MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(scan_local_state_->chunk->arrow_array.length) - scan_local_state_->chunk_offset);

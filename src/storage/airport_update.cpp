@@ -251,10 +251,10 @@ namespace duckdb
       {
         auto &data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportExchangeTakeFlightBindData>();
         auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
-        auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
+        //        auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
         state.Reset();
-        state.chunk = global_state.stream()->GetNextChunk();
+        state.chunk = state.stream()->GetNextChunk();
 
         auto output_size =
             MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
@@ -314,11 +314,11 @@ namespace duckdb
     {
       auto &bind_data = gstate.scan_table_function_input->bind_data->CastNoConst<AirportExchangeTakeFlightBindData>();
       auto &state = gstate.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
-      auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
+      //      auto &global_state = gstate.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
       state.Reset();
 
-      state.chunk = global_state.stream()->GetNextChunk();
+      state.chunk = state.stream()->GetNextChunk();
 
       auto &last_app_metadata = bind_data.last_app_metadata;
 

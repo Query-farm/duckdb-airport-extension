@@ -44,13 +44,20 @@ namespace duckdb
           schema_(std::move(schema)),
           delegate_(std::move(delegate)),
           progress_(progress),
-          last_app_metadata_(last_app_metadata) {}
+          last_app_metadata_(last_app_metadata)
+    {
+      D_ASSERT(delegate_ != nullptr);
+    }
+
     std::shared_ptr<arrow::Schema> schema() const override { return schema_; }
     arrow::Status ReadNext(std::shared_ptr<arrow::RecordBatch> *batch) override
     {
       while (true)
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk chunk, delegate_->Next(), this, "");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk chunk,
+                                                 delegate_->Next(),
+                                                 this,
+                                                 "");
         if (chunk.app_metadata)
         {
           // Handle app metadata if needed
@@ -104,15 +111,16 @@ namespace duckdb
   {
     assert(buffer_ptr != 0);
 
-    auto bind_data = reinterpret_cast<AirportTakeFlightBindData *>(buffer_ptr);
+    auto local_state = reinterpret_cast<const AirportArrowScanLocalState *>(buffer_ptr);
     auto airport_parameters = reinterpret_cast<AirportArrowStreamParameters *>(&parameters);
 
+    // This needs to pull the data off of the local state.
     auto reader = std::make_shared<FlightMetadataRecordBatchReaderAdapter>(
         *airport_parameters,
         airport_parameters->progress,
         airport_parameters->last_app_metadata,
         airport_parameters->schema(),
-        bind_data->reader());
+        local_state->reader());
 
     // Create arrow stream
     //    auto stream_wrapper = duckdb::make_uniq<duckdb::ArrowArrayStreamWrapper>();

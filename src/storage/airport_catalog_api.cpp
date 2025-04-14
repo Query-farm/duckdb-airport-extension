@@ -104,20 +104,22 @@ namespace duckdb
   }
 
   static std::unordered_map<std::string, std::shared_ptr<flight::FlightClient>> airport_flight_clients_by_location;
+  static std::mutex airport_clients_mutex;
 
   std::shared_ptr<flight::FlightClient> AirportAPI::FlightClientForLocation(const std::string &location)
   {
+    std::lock_guard<std::mutex> lock(airport_clients_mutex);
     auto it = airport_flight_clients_by_location.find(location);
     if (it != airport_flight_clients_by_location.end())
     {
-      return it->second; // Return a reference to the object
+      return it->second;
     }
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto parsed_location,
                                             flight::Location::Parse(location), location, "");
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto created_flight_client, flight::FlightClient::Connect(parsed_location), location, "");
-
-    airport_flight_clients_by_location[location] = std::move(created_flight_client);
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(airport_flight_clients_by_location[location],
+                                            flight::FlightClient::Connect(parsed_location),
+                                            location, "");
 
     return airport_flight_clients_by_location[location];
   }

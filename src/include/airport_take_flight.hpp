@@ -7,21 +7,9 @@
 
 namespace duckdb
 {
-
-  struct AirportArrowScanLocalState : public ArrowScanLocalState
-  {
-  public:
-    explicit AirportArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk, ClientContext &context)
-        : ArrowScanLocalState(std::move(current_chunk), context)
-    {
-    }
-  };
-
   struct AirportArrowScanGlobalState : public GlobalTableFunctionState
   {
-    mutex main_mutex;
     idx_t batch_index = 0;
-    bool done = false;
 
     idx_t MaxThreads() const override
     {
@@ -37,16 +25,15 @@ namespace duckdb
     AirportArrowScanGlobalState(const vector<flight::FlightEndpoint> &endpoints,
                                 const vector<idx_t> &projection_ids,
                                 const vector<LogicalType> &scanned_types)
-        : stream_(nullptr), endpoints_(endpoints), current_endpoint_(0), projection_ids_(projection_ids),
+        : endpoints_(endpoints),
+          projection_ids_(projection_ids),
           scanned_types_(scanned_types)
     {
-      D_ASSERT(endpoints_.size() == 1);
     }
 
     // There are cases where a list of endpoints isn't available, for example
     // the calls to DoExchange, so in that case don't set the endpoints.
-    explicit AirportArrowScanGlobalState(unique_ptr<ArrowArrayStreamWrapper> stream) : stream_(std::move(stream)),
-                                                                                       current_endpoint_(0)
+    explicit AirportArrowScanGlobalState()
     {
     }
 
@@ -55,18 +42,14 @@ namespace duckdb
       return endpoints_.size();
     }
 
-    const unique_ptr<ArrowArrayStreamWrapper> &stream() const
-    {
-      return stream_;
-    }
-
     const std::optional<const flight::FlightEndpoint> GetNextEndpoint()
     {
-      if (current_endpoint_ >= endpoints_.size())
+      size_t index = current_endpoint_.fetch_add(1, std::memory_order_relaxed);
+      if (index < endpoints_.size())
       {
-        return std::nullopt;
+        return endpoints_[index];
       }
-      return endpoints_[current_endpoint_++];
+      return std::nullopt;
     }
 
     const vector<idx_t> &projection_ids() const
@@ -79,27 +62,22 @@ namespace duckdb
       return scanned_types_;
     }
 
-    const bool has_stream() const
-    {
-      return stream_ != nullptr;
-    }
-
-    unique_ptr<ArrowArrayStreamWrapper> stream_;
-
   private:
     vector<flight::FlightEndpoint> endpoints_;
-    idx_t current_endpoint_ = 0;
+    std::atomic<size_t> current_endpoint_ = 0;
     const vector<idx_t> projection_ids_;
     const vector<LogicalType> scanned_types_;
   };
 
-  unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(const ArrowScanFunctionData &function,
-                                                              const vector<column_t> &column_ids,
-                                                              TableFilterSet *filters,
-                                                              atomic<double> *progress,
-                                                              std::shared_ptr<arrow::Buffer> *last_app_metadata,
-                                                              const std::shared_ptr<arrow::Schema> &schema,
-                                                              const AirportLocationDescriptor &location_descriptor);
+  shared_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(
+      const ArrowScanFunctionData &function,
+      const vector<column_t> &column_ids,
+      const TableFilterSet *filters,
+      atomic<double> *progress,
+      std::shared_ptr<arrow::Buffer> *last_app_metadata,
+      const std::shared_ptr<arrow::Schema> &schema,
+      const AirportLocationDescriptor &location_descriptor,
+      AirportArrowScanLocalState &local_state);
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 

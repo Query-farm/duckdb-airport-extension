@@ -116,24 +116,84 @@ namespace duckdb
     std::unordered_map<string, std::vector<string>> user_supplied_headers_;
   };
 
+  struct AirportArrowScanGlobalState;
+
+  struct AirportArrowScanLocalState : public ArrowScanLocalState
+  {
+  public:
+    explicit AirportArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk,
+                                        ClientContext &context,
+                                        std::shared_ptr<arrow::flight::FlightStreamReader> reader,
+                                        TableFunctionInitInput &input)
+        : ArrowScanLocalState(std::move(current_chunk), context),
+          reader_(std::move(reader)),
+          input_(input)
+    {
+      D_ASSERT(reader_ != nullptr);
+    }
+
+    explicit AirportArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk,
+                                        ClientContext &context,
+                                        TableFunctionInitInput &input)
+        : ArrowScanLocalState(std::move(current_chunk), context),
+          reader_(nullptr), input_(input)
+    {
+    }
+
+    const shared_ptr<ArrowArrayStreamWrapper> &stream() const
+    {
+      D_ASSERT(stream_ != nullptr);
+      return stream_;
+    }
+
+    const std::shared_ptr<arrow::flight::FlightStreamReader> &reader() const
+    {
+      return reader_;
+    }
+
+    void set_reader(std::shared_ptr<arrow::flight::FlightStreamReader> reader)
+    {
+      D_ASSERT(reader != nullptr);
+      reader_ = reader;
+    }
+
+    void set_stream(shared_ptr<ArrowArrayStreamWrapper> stream)
+    {
+      D_ASSERT(stream != nullptr);
+      stream_ = stream;
+    }
+
+    const TableFunctionInitInput &input() const
+    {
+      return input_;
+    }
+
+    bool done = false;
+
+  private:
+    std::shared_ptr<arrow::flight::FlightStreamReader> reader_;
+    shared_ptr<ArrowArrayStreamWrapper> stream_;
+    const TableFunctionInitInput input_;
+  };
+
   struct AirportTakeFlightBindData : public ArrowScanFunctionData, public AirportLocationDescriptor
   {
   public:
-    AirportTakeFlightBindData(stream_factory_produce_t scanner_producer_p,
-                              const string &trace_id,
-                              const int64_t estimated_records,
-                              const AirportTakeFlightParameters &take_flight_params_p,
-                              const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
-                              std::shared_ptr<arrow::Schema> schema,
-                              const flight::FlightDescriptor &descriptor,
-                              std::shared_ptr<arrow::flight::FlightStreamReader> reader,
-                              shared_ptr<DependencyItem> dependency = nullptr) : ArrowScanFunctionData(scanner_producer_p, (uintptr_t)this, std::move(dependency)),
-                                                                                 AirportLocationDescriptor(take_flight_params_p.server_location(), descriptor),
-                                                                                 trace_id_(trace_id), estimated_records_(estimated_records),
-                                                                                 take_flight_params_(take_flight_params_p),
-                                                                                 table_function_parameters_(table_function_parameters_p),
-                                                                                 reader_(std::move(reader)),
-                                                                                 schema_(schema)
+    AirportTakeFlightBindData(
+        stream_factory_produce_t scanner_producer_p,
+        const string &trace_id,
+        const int64_t estimated_records,
+        const AirportTakeFlightParameters &take_flight_params_p,
+        const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
+        std::shared_ptr<arrow::Schema> schema,
+        const flight::FlightDescriptor &descriptor,
+        shared_ptr<DependencyItem> dependency = nullptr)
+        : ArrowScanFunctionData(scanner_producer_p, (uintptr_t)this, std::move(dependency)),
+          AirportLocationDescriptor(take_flight_params_p.server_location(), descriptor),
+          trace_id_(trace_id), estimated_records_(estimated_records),
+          take_flight_params_(take_flight_params_p),
+          table_function_parameters_(table_function_parameters_p),
+          schema_(schema)
 
     {
       AIRPORT_ARROW_ASSERT_OK_CONTAINER(
@@ -176,16 +236,6 @@ namespace duckdb
     const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters() const
     {
       return table_function_parameters_;
-    }
-
-    const std::shared_ptr<arrow::flight::FlightStreamReader> &reader() const
-    {
-      return reader_;
-    }
-
-    void set_reader(std::unique_ptr<arrow::flight::FlightStreamReader> reader)
-    {
-      reader_ = std::move(reader);
     }
 
     const std::shared_ptr<arrow::Schema> &schema() const
@@ -248,7 +298,6 @@ namespace duckdb
     const AirportTakeFlightParameters take_flight_params_;
     const std::optional<AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
 
-    std::shared_ptr<arrow::flight::FlightStreamReader> reader_;
     const std::shared_ptr<arrow::Schema> schema_;
   };
 

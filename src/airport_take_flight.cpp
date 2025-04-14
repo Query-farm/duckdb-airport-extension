@@ -229,27 +229,51 @@ namespace duckdb
         std::nullopt);
   }
 
-  static bool AirportArrowScanParallelStateNext(const ClientContext &context, const FunctionData *bind_data_p,
-                                                AirportArrowScanLocalState &state, AirportArrowScanGlobalState &parallel_state)
+  static bool
+  AirportLocalStatePopulateEndpoint(ClientContext &context,
+                                    const TableFunctionInitInput &input,
+                                    const AirportTakeFlightBindData &bind_data,
+                                    AirportArrowScanGlobalState &global_state,
+                                    AirportArrowScanLocalState &local_state,
+                                    const flight::FlightEndpoint endpoint);
+
+  static bool AirportArrowScanParallelStateNext(AirportArrowScanLocalState &state,
+                                                AirportArrowScanGlobalState &global_state,
+                                                const AirportTakeFlightBindData &bind_data,
+                                                ClientContext &context)
   {
-    lock_guard<mutex> parallel_lock(parallel_state.main_mutex);
-    if (parallel_state.done)
+    //    lock_guard<mutex> parallel_lock(parallel_state.main_mutex);
+    if (state.done)
     {
       return false;
     }
     state.Reset();
-    state.batch_index = ++parallel_state.batch_index;
+    state.batch_index++; //= ++parallel_state.batch_index;
 
-    auto current_chunk = parallel_state.stream()->GetNextChunk();
+    auto current_chunk = state.stream()->GetNextChunk();
     while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release)
     {
-      current_chunk = parallel_state.stream()->GetNextChunk();
+      current_chunk = state.stream()->GetNextChunk();
     }
     state.chunk = std::move(current_chunk);
     //! have we run out of chunks? we are done
     if (!state.chunk->arrow_array.release)
     {
-      parallel_state.done = true;
+      auto &endpoint_opt = global_state.GetNextEndpoint();
+      if (!endpoint_opt)
+      {
+        return false;
+      }
+      if (AirportLocalStatePopulateEndpoint(context,
+                                            state.input(),
+                                            bind_data,
+                                            global_state,
+                                            state,
+                                            *endpoint_opt))
+      {
+        return true;
+      }
+      state.done = true;
       return false;
     }
     return true;
@@ -257,29 +281,25 @@ namespace duckdb
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)
   {
-    if (!data_p.local_state)
-    {
-      return;
-    }
     auto &state = data_p.local_state->Cast<AirportArrowScanLocalState>();
     auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
     auto &airport_bind_data = data_p.bind_data->CastNoConst<AirportTakeFlightBindData>();
 
+    const auto array_length = (idx_t)state.chunk->arrow_array.length;
     //! Out of tuples in this chunk
-    if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length)
+    if (state.chunk_offset >= array_length)
     {
-      if (!AirportArrowScanParallelStateNext(
-              context,
-              &airport_bind_data,
-              state,
-              global_state))
+      if (!AirportArrowScanParallelStateNext(state,
+                                             global_state,
+                                             airport_bind_data,
+                                             context))
       {
         return;
       }
     }
-    auto output_size =
+    const auto output_size =
         MinValue<int64_t>(STANDARD_VECTOR_SIZE,
-                          state.chunk->arrow_array.length - state.chunk_offset);
+                          array_length - state.chunk_offset);
 
     airport_bind_data.lines_read += output_size;
 
@@ -287,15 +307,23 @@ namespace duckdb
     {
       state.all_columns.Reset();
       state.all_columns.SetCardinality(output_size);
-      ArrowTableFunction::ArrowToDuckDB(state, airport_bind_data.arrow_table.GetColumns(), state.all_columns,
-                                        airport_bind_data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
+      ArrowTableFunction::ArrowToDuckDB(state,
+                                        airport_bind_data.arrow_table.GetColumns(),
+                                        state.all_columns,
+                                        airport_bind_data.lines_read - output_size,
+                                        false,
+                                        airport_bind_data.rowid_column_index);
       output.ReferenceColumns(state.all_columns, global_state.projection_ids());
     }
     else
     {
       output.SetCardinality(output_size);
-      ArrowTableFunction::ArrowToDuckDB(state, airport_bind_data.arrow_table.GetColumns(), output,
-                                        airport_bind_data.lines_read - output_size, false, airport_bind_data.rowid_column_index);
+      ArrowTableFunction::ArrowToDuckDB(state,
+                                        airport_bind_data.arrow_table.GetColumns(),
+                                        output,
+                                        airport_bind_data.lines_read - output_size,
+                                        false,
+                                        airport_bind_data.rowid_column_index);
     }
 
     output.Verify();
@@ -368,14 +396,15 @@ namespace duckdb
     bind_data.json_filters = json_result;
   }
 
-  unique_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(
+  shared_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(
       const ArrowScanFunctionData &function,
       const vector<column_t> &column_ids,
-      TableFilterSet *filters,
+      const TableFilterSet *filters,
       atomic<double> *progress,
       std::shared_ptr<arrow::Buffer> *last_app_metadata,
       const std::shared_ptr<arrow::Schema> &schema,
-      const AirportLocationDescriptor &location_descriptor)
+      const AirportLocationDescriptor &location_descriptor,
+      AirportArrowScanLocalState &local_state)
   {
     AirportArrowStreamParameters parameters(progress,
                                             last_app_metadata,
@@ -401,9 +430,7 @@ namespace duckdb
 
     parameters.filters = filters;
 
-    // TODO
-    // RUSTY: replace this.
-    return function.scanner_producer(function.stream_factory_ptr, parameters);
+    return function.scanner_producer((uintptr_t)&local_state, parameters);
   }
 
   // static string CompressString(const string &input, const string &location, const flight::FlightDescriptor &descriptor)
@@ -574,20 +601,33 @@ namespace duckdb
     // can be reported across all endpoints.
     bind_data.set_endpoint_count(result->total_endpoints());
 
-    auto &first_endpoint_opt = result->GetNextEndpoint();
-    if (!first_endpoint_opt)
-    {
-      throw InvalidInputException("airport_take_flight: no endpoints returned from server");
-    }
-    auto &first_endpoint = *first_endpoint_opt;
-    auto &first_location = first_endpoint.locations.front();
+    return result;
+  }
 
-    auto server_location = first_location.ToString();
-    if (first_location != flight::Location::ReuseConnection())
+  static double take_flight_scan_progress(ClientContext &, const FunctionData *data, const GlobalTableFunctionState *global_state)
+  {
+    return data->Cast<AirportTakeFlightBindData>().total_progress();
+  }
+
+  static bool
+  AirportLocalStatePopulateEndpoint(ClientContext &context,
+                                    const TableFunctionInitInput &input,
+                                    const AirportTakeFlightBindData &bind_data,
+                                    AirportArrowScanGlobalState &global_state,
+                                    AirportArrowScanLocalState &local_state,
+                                    const flight::FlightEndpoint endpoint)
+  {
+    auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
+
+    auto &first_endpoint_location = endpoint.locations.front();
+
+    auto server_location = first_endpoint_location.ToString();
+
+    if (first_endpoint_location != flight::Location::ReuseConnection())
     {
       AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_client,
-                                              flight::FlightClient::Connect(first_location),
-                                              first_location.ToString(),
+                                              flight::FlightClient::Connect(first_endpoint_location),
+                                              first_endpoint_location.ToString(),
                                               "");
       server_location = bind_data.server_location();
     }
@@ -612,7 +652,7 @@ namespace duckdb
         auto stream,
         flight_client->DoGet(
             call_options,
-            first_endpoint.ticket),
+            endpoint.ticket),
         server_location,
         descriptor,
         "");
@@ -620,49 +660,77 @@ namespace duckdb
     // FIXME: make sure that the schema returned from the server is the same as
     // what we were expecting.
 
-    bind_data.set_reader(std::move(stream));
+    // So the bind data won't have a stream set on it,
+    // but the local state will, the prokblem is the CreateStream
+    // callback doesn't have a reference to the local state.
 
-    result->stream_ = AirportProduceArrowScan(bind_data,
-                                              input.column_ids,
-                                              input.filters.get(),
-                                              bind_data.get_progress_counter(0),
-                                              // No need for the last metadata message.
-                                              nullptr,
-                                              bind_data.schema(),
-                                              bind_data);
+    // Can we reuse the chunk?
+    auto current_chunk = make_uniq<ArrowArrayWrapper>();
 
-    return result;
-  }
+    local_state.chunk = std::move(current_chunk);
+    local_state.set_reader(std::move(stream));
 
-  static double take_flight_scan_progress(ClientContext &, const FunctionData *data, const GlobalTableFunctionState *global_state)
-  {
-    return data->Cast<AirportTakeFlightBindData>().total_progress();
+    local_state.set_stream(
+        AirportProduceArrowScan(bind_data,
+                                input.column_ids,
+                                input.filters.get(),
+                                bind_data.get_progress_counter(0),
+                                // No need for the last metadata message.
+                                nullptr,
+                                bind_data.schema(),
+                                bind_data,
+                                local_state));
+
+    local_state.column_ids = input.column_ids;
+    local_state.filters = (TableFilterSet *)input.filters.get();
+    if (!bind_data.projection_pushdown_enabled)
+    {
+      local_state.column_ids.clear();
+    }
+    else if (!input.projection_ids.empty())
+    {
+      //      auto &asgs = global_state_p->Cast<AirportArrowScanGlobalState>();
+      local_state.all_columns.Initialize(context, global_state.scanned_types());
+    }
+    if (!AirportArrowScanParallelStateNext(local_state,
+                                           global_state,
+                                           bind_data,
+                                           context))
+    {
+      return false;
+    }
+    return true;
   }
 
   static unique_ptr<LocalTableFunctionState>
   AirportArrowScanInitLocalInternal(ClientContext &context, TableFunctionInitInput &input,
                                     GlobalTableFunctionState *global_state_p)
   {
-    auto &global_state = global_state_p->Cast<AirportArrowScanGlobalState>();
-    auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto result = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
-    result->column_ids = input.column_ids;
-    result->filters = input.filters.get();
     auto &bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
-    if (!bind_data.projection_pushdown_enabled)
-    {
-      result->column_ids.clear();
-    }
-    else if (!input.projection_ids.empty())
-    {
-      auto &asgs = global_state_p->Cast<AirportArrowScanGlobalState>();
-      result->all_columns.Initialize(context, asgs.scanned_types());
-    }
-    if (!AirportArrowScanParallelStateNext(context, input.bind_data.get(), *result, global_state))
+    auto &global_state = global_state_p->Cast<AirportArrowScanGlobalState>();
+
+    auto &endpoint_opt = global_state.GetNextEndpoint();
+    if (!endpoint_opt)
     {
       return nullptr;
     }
-    return result;
+
+    auto current_chunk = make_uniq<ArrowArrayWrapper>();
+    auto result = make_uniq<AirportArrowScanLocalState>(
+        std::move(current_chunk),
+        context,
+        input);
+
+    if (AirportLocalStatePopulateEndpoint(context,
+                                          input,
+                                          bind_data,
+                                          global_state,
+                                          *result,
+                                          *endpoint_opt))
+    {
+      return result;
+    }
+    return nullptr;
   }
 
   unique_ptr<LocalTableFunctionState> AirportArrowScanInitLocal(ExecutionContext &context,

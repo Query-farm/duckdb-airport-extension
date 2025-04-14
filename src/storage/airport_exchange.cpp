@@ -114,7 +114,7 @@ namespace duckdb
         std::nullopt,
         read_schema,
         descriptor,
-        std::move(exchange_result.reader));
+        nullptr);
 
     vector<column_t> column_ids;
 
@@ -180,18 +180,9 @@ namespace duckdb
     // scan...
 
     // Init the global state.
-    auto scan_global_state = make_uniq<AirportArrowScanGlobalState>(
-        AirportProduceArrowScan(
-            scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
-            column_ids,
-            nullptr,
-            nullptr, // No progress reporting.
-            &scan_bind_data->last_app_metadata,
-            scan_bind_data->schema(),
-            *scan_bind_data));
 
     // Retain the global state.
-    global_state->scan_global_state = std::move(scan_global_state);
+    global_state->scan_global_state = make_uniq<AirportArrowScanGlobalState>();
 
     // Now simulate the init input.
     auto fake_init_input = TableFunctionInitInput(
@@ -203,7 +194,20 @@ namespace duckdb
     // Local init.
 
     auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(std::move(current_chunk), context);
+    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(
+        std::move(current_chunk),
+        context,
+        std::move(exchange_result.reader), fake_init_input);
+    scan_local_state->set_stream(AirportProduceArrowScan(
+        scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
+        column_ids,
+        nullptr,
+        nullptr, // No progress reporting.
+        &scan_bind_data->last_app_metadata,
+        scan_bind_data->schema(),
+        *scan_bind_data,
+        *scan_local_state));
+
     scan_local_state->column_ids = fake_init_input.column_ids;
     scan_local_state->filters = fake_init_input.filters.get();
 
