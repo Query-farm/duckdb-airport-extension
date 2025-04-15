@@ -9,7 +9,7 @@ namespace duckdb
 {
   struct AirportArrowScanGlobalState : public GlobalTableFunctionState
   {
-    idx_t batch_index = 0;
+    // idx_t batch_index = 0;
 
     idx_t MaxThreads() const override
     {

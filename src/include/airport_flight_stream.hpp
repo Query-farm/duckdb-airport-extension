@@ -129,14 +129,14 @@ namespace duckdb
           reader_(std::move(reader)),
           input_(input)
     {
-      D_ASSERT(reader_ != nullptr);
+      D_ASSERT(reader != nullptr);
     }
 
     explicit AirportArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk,
                                         ClientContext &context,
                                         TableFunctionInitInput &input)
         : ArrowScanLocalState(std::move(current_chunk), context),
-          reader_(nullptr), input_(input)
+          reader_(std::shared_ptr<arrow::flight::FlightStreamReader>(nullptr)), input_(input)
     {
     }
 
@@ -146,12 +146,28 @@ namespace duckdb
       return stream_;
     }
 
-    const std::shared_ptr<arrow::flight::FlightStreamReader> &reader() const
+    const std::variant<
+        std::shared_ptr<arrow::flight::FlightStreamReader>,
+        std::shared_ptr<arrow::ipc::RecordBatchStreamReader>,
+        std::shared_ptr<arrow::ipc::RecordBatchFileReader>> &
+    reader() const
     {
       return reader_;
     }
 
     void set_reader(std::shared_ptr<arrow::flight::FlightStreamReader> reader)
+    {
+      D_ASSERT(reader != nullptr);
+      reader_ = reader;
+    }
+
+    void set_reader(std::shared_ptr<arrow::ipc::RecordBatchStreamReader> reader)
+    {
+      D_ASSERT(reader != nullptr);
+      reader_ = reader;
+    }
+
+    void set_reader(std::shared_ptr<arrow::ipc::RecordBatchFileReader> reader)
     {
       D_ASSERT(reader != nullptr);
       reader_ = reader;
@@ -170,8 +186,16 @@ namespace duckdb
 
     bool done = false;
 
+  public:
+    idx_t lines_read = 0;
+
   private:
-    std::shared_ptr<arrow::flight::FlightStreamReader> reader_;
+    std::variant<
+        std::shared_ptr<arrow::flight::FlightStreamReader>,
+        std::shared_ptr<arrow::ipc::RecordBatchStreamReader>,
+        std::shared_ptr<arrow::ipc::RecordBatchFileReader>>
+        reader_;
+
     shared_ptr<ArrowArrayStreamWrapper> stream_;
     const TableFunctionInitInput input_;
   };

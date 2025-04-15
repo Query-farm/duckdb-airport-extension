@@ -1116,12 +1116,12 @@ namespace duckdb
           MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
       output.SetCardinality(state.chunk->arrow_array.length);
 
-      data.lines_read += output_size;
+      state.lines_read += output_size;
       ArrowTableFunction::ArrowToDuckDB(state,
                                         // I'm not sure if arrow table will be defined
                                         data.arrow_table.GetColumns(),
                                         output,
-                                        data.lines_read - output_size,
+                                        state.lines_read - output_size,
                                         false);
       output.Verify();
     }
@@ -1159,14 +1159,14 @@ namespace duckdb
           MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
       output.SetCardinality(state.chunk->arrow_array.length);
 
-      data.lines_read += output_size;
+      state.lines_read += output_size;
       if (output_size > 0)
       {
         ArrowTableFunction::ArrowToDuckDB(state,
                                           // I'm not sure if arrow table will be defined
                                           data.arrow_table.GetColumns(),
                                           output,
-                                          data.lines_read - output_size,
+                                          state.lines_read - output_size,
                                           false);
       }
       output.Verify();

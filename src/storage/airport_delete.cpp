@@ -193,7 +193,7 @@ namespace duckdb
 
         auto output_size =
             MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
-        data.lines_read += output_size;
+        state.lines_read += output_size;
         ustate.delete_chunk.SetCardinality(state.chunk->arrow_array.length);
 
         // Assume that the data returned is the same size as the table.
@@ -202,7 +202,7 @@ namespace duckdb
         ArrowTableFunction::ArrowToDuckDB(state,
                                           data.arrow_table.GetColumns(),
                                           ustate.delete_chunk,
-                                          data.lines_read - output_size, false);
+                                          state.lines_read - output_size, false);
         ustate.delete_chunk.Verify();
         gstate.return_collection.Append(ustate.delete_chunk);
       }

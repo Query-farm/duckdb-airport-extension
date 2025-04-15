@@ -314,13 +314,13 @@ namespace duckdb
 
         auto output_size =
             MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
-        data.lines_read += output_size;
+        state.lines_read += output_size;
         ustate.returning_data_chunk.SetCardinality(state.chunk->arrow_array.length);
 
         ArrowTableFunction::ArrowToDuckDB(state,
                                           data.arrow_table.GetColumns(),
                                           ustate.returning_data_chunk,
-                                          data.lines_read - output_size,
+                                          state.lines_read - output_size,
                                           false);
         ustate.returning_data_chunk.Verify();
         gstate.return_collection.Append(ustate.returning_data_chunk);

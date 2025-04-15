@@ -258,7 +258,7 @@ namespace duckdb
 
         auto output_size =
             MinValue<idx_t>(STANDARD_VECTOR_SIZE, NumericCast<idx_t>(state.chunk->arrow_array.length) - state.chunk_offset);
-        data.lines_read += output_size;
+        state.lines_read += output_size;
 
         // printf("Returning chunk is:\n%s\n", lstate.read_from_flight_chunk.ToString().c_str());
 
@@ -269,7 +269,7 @@ namespace duckdb
                                           // which are the types of the update.
                                           data.arrow_table.GetColumns(),
                                           lstate.read_from_flight_chunk,
-                                          data.lines_read - output_size,
+                                          state.lines_read - output_size,
                                           false);
         lstate.read_from_flight_chunk.Verify();
         DataChunk &mock_chunk = lstate.table_mock_chunk;
