@@ -129,7 +129,7 @@ namespace duckdb
       vector<duckdb::LogicalType> return_types;
       vector<string> not_null_columns;
 
-      LogicalType rowid_type = LogicalType(LogicalType::ROW_TYPE);
+      LogicalType rowid_type = LogicalType(LogicalType::SQLNULL);
 
       if (arrow_schema.metadata != nullptr)
       {

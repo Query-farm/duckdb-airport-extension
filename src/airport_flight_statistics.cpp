@@ -148,6 +148,10 @@ namespace duckdb
     {
       return make_uniq<BaseStatistics>(BaseStatistics::CreateEmpty(LogicalType::BIGINT));
     }
+    else if (column_index == COLUMN_IDENTIFIER_EMPTY)
+    {
+      return make_uniq<BaseStatistics>(BaseStatistics::CreateEmpty(LogicalType::BOOLEAN));
+    }
 
     // So we need to map the column id to the logical type.
     auto &schema = data.schema_root.arrow_schema.children[column_index];

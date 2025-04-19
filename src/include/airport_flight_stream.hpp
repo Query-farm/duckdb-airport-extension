@@ -18,6 +18,11 @@
 #include "msgpack.hpp"
 #include "airport_location_descriptor.hpp"
 #include "airport_macros.hpp"
+
+#include "duckdb/parallel/thread_context.hpp"
+#include "duckdb/parser/tableref/table_function_ref.hpp"
+#include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
+
 namespace flight = arrow::flight;
 
 /// File copied from
@@ -118,9 +123,38 @@ namespace duckdb
 
   struct AirportArrowScanGlobalState;
 
+  struct AirportLocalScanData
+  {
+    TableFunction &table_function;
+    unique_ptr<FunctionData> bind_data;
+    unique_ptr<GlobalTableFunctionState> global_state;
+    unique_ptr<LocalTableFunctionState> local_state;
+
+    vector<LogicalType> return_types;
+    vector<string> return_names;
+
+  private:
+    ThreadContext thread_context;
+    ExecutionContext execution_context;
+
+  public:
+    explicit AirportLocalScanData(std::string uri,
+                                  ClientContext &context,
+                                  TableFunction &func,
+                                  const vector<LogicalType> &expected_return_types,
+                                  const vector<string> &expected_return_names,
+                                  const TableFunctionInitInput &init_input);
+    bool finished_chunk;
+  };
+
   struct AirportArrowScanLocalState : public ArrowScanLocalState
   {
   public:
+    using ReaderDelegate = std::variant<
+        std::shared_ptr<arrow::flight::FlightStreamReader>,
+        std::shared_ptr<arrow::ipc::RecordBatchStreamReader>,
+        std::shared_ptr<arrow::ipc::RecordBatchFileReader>,
+        std::shared_ptr<AirportLocalScanData>>;
     explicit AirportArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk,
                                         ClientContext &context,
                                         std::shared_ptr<arrow::flight::FlightStreamReader> reader,
@@ -142,14 +176,11 @@ namespace duckdb
 
     const shared_ptr<ArrowArrayStreamWrapper> &stream() const
     {
-      D_ASSERT(stream_ != nullptr);
+      //      D_ASSERT(stream_ != nullptr);
       return stream_;
     }
 
-    const std::variant<
-        std::shared_ptr<arrow::flight::FlightStreamReader>,
-        std::shared_ptr<arrow::ipc::RecordBatchStreamReader>,
-        std::shared_ptr<arrow::ipc::RecordBatchFileReader>> &
+    const ReaderDelegate &
     reader() const
     {
       return reader_;
@@ -173,9 +204,15 @@ namespace duckdb
       reader_ = reader;
     }
 
+    void set_reader(std::shared_ptr<AirportLocalScanData> reader)
+    {
+      D_ASSERT(reader != nullptr);
+      reader_ = reader;
+    }
+
     void set_stream(shared_ptr<ArrowArrayStreamWrapper> stream)
     {
-      D_ASSERT(stream != nullptr);
+      //      D_ASSERT(stream != nullptr);
       stream_ = stream;
     }
 
@@ -190,11 +227,7 @@ namespace duckdb
     idx_t lines_read = 0;
 
   private:
-    std::variant<
-        std::shared_ptr<arrow::flight::FlightStreamReader>,
-        std::shared_ptr<arrow::ipc::RecordBatchStreamReader>,
-        std::shared_ptr<arrow::ipc::RecordBatchFileReader>>
-        reader_;
+    ReaderDelegate reader_;
 
     shared_ptr<ArrowArrayStreamWrapper> stream_;
     const TableFunctionInitInput input_;
@@ -305,6 +338,22 @@ namespace duckdb
 
     std::shared_ptr<arrow::Buffer> last_app_metadata = nullptr;
 
+    void set_types_and_names(const vector<LogicalType> &types, const vector<string> &names)
+    {
+      return_types_ = types;
+      return_names_ = names;
+    }
+
+    const vector<LogicalType> &return_types() const
+    {
+      return return_types_;
+    }
+
+    const vector<string> &return_names() const
+    {
+      return return_names_;
+    }
+
   private:
     // The total number of endpoints that will be scanned, this is used
     // in calculating the progress of the scan.
@@ -323,6 +372,9 @@ namespace duckdb
     const std::optional<AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
 
     const std::shared_ptr<arrow::Schema> schema_;
+
+    vector<LogicalType> return_types_;
+    vector<string> return_names_;
   };
 
   duckdb::unique_ptr<duckdb::ArrowArrayStreamWrapper>

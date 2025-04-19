@@ -24,6 +24,128 @@
 namespace duckdb
 {
 
+  AirportLocalScanData::AirportLocalScanData(std::string uri,
+                                             ClientContext &context,
+                                             TableFunction &func,
+                                             const vector<LogicalType> &expected_return_types,
+                                             const vector<string> &expected_return_names,
+                                             const TableFunctionInitInput &init_input)
+      : table_function(func),
+        thread_context(context),
+        execution_context(context, thread_context, nullptr),
+        finished_chunk(false)
+  {
+    vector<Value> children;
+    children.reserve(1);
+    children.push_back(Value(uri));
+    named_parameter_map_t named_params;
+    vector<LogicalType> input_types;
+    vector<string> input_names;
+
+    TableFunctionRef empty;
+    TableFunction dummy_table_function;
+    dummy_table_function.name = "AirportEndpointParquetScan";
+    TableFunctionBindInput bind_input(
+        children,
+        named_params,
+        input_types,
+        input_names,
+        nullptr,
+        nullptr,
+        dummy_table_function,
+        empty);
+
+    bind_data = func.bind(context,
+                          bind_input,
+                          return_types,
+                          return_names);
+
+    // printf("Parquet names: %s\n", StringUtil::Join(return_names, ", ").c_str());
+    // printf("Parquet types: %s\n", StringUtil::Join(return_types, return_types.size(), ", ", [](const LogicalType &type)
+    //                                                { return type.ToString(); })
+    //                                   .c_str());
+
+    // auto virtual_columns = func.get_virtual_columns(context, bind_data);
+    // for (auto &virtual_column : virtual_columns)
+    // {
+    //   printf("Got virtual column %d name: %s type: %s\n", virtual_column.first, virtual_column.second.name.c_str(), virtual_column.second.type.ToString().c_str());
+    // }
+
+    D_ASSERT(return_names.size() == return_types.size());
+    std::unordered_map<std::string, std::pair<size_t, LogicalType>> scan_index_map;
+    for (size_t i = 0; i < return_names.size(); i++)
+    {
+      scan_index_map[return_names[i]] = {i, return_types[i]};
+    }
+
+    // Reuse the first init input, but override the bind data, that way the predicate
+    // pushdown is handled.
+    TableFunctionInitInput input(init_input);
+
+    vector<column_t> mapped_column_ids;
+    vector<ColumnIndex> mapped_column_indexes;
+    for (auto &column_id : input.column_ids)
+    {
+      if (column_id == COLUMN_IDENTIFIER_ROW_ID || column_id == COLUMN_IDENTIFIER_EMPTY)
+      {
+        mapped_column_ids.push_back(column_id);
+        mapped_column_indexes.emplace_back(column_id);
+        continue;
+      }
+
+      auto &referenced_column_name = expected_return_names[column_id];
+      auto &referenced_column_type = expected_return_types[column_id];
+
+      auto it = scan_index_map.find(referenced_column_name);
+
+      if (it == scan_index_map.end())
+      {
+        throw BinderException("Airport : The column name " + referenced_column_name + " does not exist in the Arrow Flight schema.  Found column names: " +
+                              StringUtil::Join(return_names, ", ") + " expected column names: " +
+                              StringUtil::Join(expected_return_names, ", "));
+      }
+
+      auto &found_column_index = it->second.first;
+      auto &found_column_type = it->second.second;
+
+      if (found_column_type != referenced_column_type)
+      {
+        throw BinderException("Airport: The data type for column " + referenced_column_name + " does not match the expected data type in the Arrow Flight schema. " +
+                              "Found data type: " +
+                              found_column_type.ToString() +
+                              " expected data type: " +
+                              referenced_column_type.ToString());
+      }
+
+      mapped_column_ids.push_back(found_column_index);
+      mapped_column_indexes.emplace_back(found_column_index);
+    }
+
+    input.column_ids = mapped_column_ids;
+    input.column_indexes = mapped_column_indexes;
+
+    // printf("Binding data for parquet read\n");
+    // printf("Column ids: %s\n", StringUtil::Join(input.column_ids, input.column_ids.size(), ", ",
+    //                                             [](const column_t &id)
+    //                                             { return std::to_string(id); }
+
+    //                                             )
+    //                                .c_str());
+    // printf("Column indexes : %s\n", StringUtil::Join(input.column_indexes, input.column_indexes.size(), ", ",
+    //                                                  [](const ColumnIndex &type)
+    //                                                  { return std::to_string(type.GetPrimaryIndex()); })
+    //                                     .c_str());
+    // printf("Projection ids: %s\n", StringUtil::Join(input.projection_ids, input.projection_ids.size(), ", ",
+    //                                                 [](const idx_t &id)
+    //                                                 { return std::to_string(id); })
+    //                                    .c_str());
+    input.bind_data = bind_data.get();
+
+    global_state = func.init_global(context, input);
+
+    local_state = func.init_local(execution_context, input, global_state.get());
+  }
+
   struct AirportScannerProgress
   {
     double progress;
@@ -37,7 +159,8 @@ namespace duckdb
     using ReaderDelegate = std::variant<
         std::shared_ptr<arrow::flight::FlightStreamReader>,
         std::shared_ptr<arrow::ipc::RecordBatchStreamReader>,
-        std::shared_ptr<arrow::ipc::RecordBatchFileReader>>;
+        std::shared_ptr<arrow::ipc::RecordBatchFileReader>,
+        std::shared_ptr<AirportLocalScanData>>;
 
     explicit FlightMetadataRecordBatchReaderAdapter(
         const AirportLocationDescriptor &location_descriptor,

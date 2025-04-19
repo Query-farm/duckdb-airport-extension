@@ -31,6 +31,8 @@
 #include "airport_schema_utils.h"
 #include <openssl/bio.h>
 #include <openssl/evp.h>
+#include "duckdb/parser/tableref/table_function_ref.hpp"
+#include "duckdb/catalog/catalog_entry/table_function_catalog_entry.hpp"
 
 namespace duckdb
 {
@@ -180,6 +182,10 @@ namespace duckdb
                          &ret->rowid_column_index,
                          true);
 
+    // Store the return types and names so they can be
+    // validated by parquet_scans or other scans used in endpoints.
+    ret->set_types_and_names(return_types, names);
+
     return ret;
   }
 
@@ -256,20 +262,38 @@ namespace duckdb
     state.Reset();
     state.batch_index++; //= ++parallel_state.batch_index;
 
-    auto current_chunk = state.stream()->GetNextChunk();
-    while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release)
+    bool finished_chunk = false;
+
+    if (!state.stream())
     {
-      current_chunk = state.stream()->GetNextChunk();
+
+      auto &scan_data = std::get<std::shared_ptr<AirportLocalScanData>>(state.reader());
+      if (scan_data->finished_chunk)
+      {
+        finished_chunk = true;
+      }
     }
-    state.chunk = std::move(current_chunk);
+    else
+    {
+      auto current_chunk = state.stream()->GetNextChunk();
+      while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release)
+      {
+        current_chunk = state.stream()->GetNextChunk();
+      }
+      state.chunk = std::move(current_chunk);
+
+      finished_chunk = !state.chunk->arrow_array.release;
+    }
+
     //! have we run out of chunks? we are done
-    if (!state.chunk->arrow_array.release)
+    if (finished_chunk)
     {
       auto &endpoint_opt = global_state.GetNextEndpoint();
       if (!endpoint_opt)
       {
         return false;
       }
+
       if (AirportLocalStateProcessEndpoint(context,
                                            state.input(),
                                            bind_data,
@@ -291,48 +315,92 @@ namespace duckdb
     auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
     auto &airport_bind_data = data_p.bind_data->CastNoConst<AirportTakeFlightBindData>();
 
-    //! Out of tuples in this chunk
-    if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length)
+    if (!state.stream())
     {
-      if (!AirportArrowScanParallelStateNext(state,
-                                             global_state,
-                                             airport_bind_data,
-                                             context))
+      idx_t count = 0;
+      while (count == 0)
       {
-        return;
+        auto &scan_data = std::get<std::shared_ptr<AirportLocalScanData>>(state.reader());
+
+        // So the actual columns being returned are different compared to the columns
+        // available in the output, where is that change happening and how can we get
+        // that data?
+
+        // auto &return_types = airport_bind_data.return_types();
+        // auto &output_names = airport_bind_data.return_names();
+        // for (idx_t i = 0; i < return_types.size(); i++)
+        // {
+        //   printf("Output column %llu: type=%s name=%s\n", i, return_types[i].ToString().c_str(), output_names[i].c_str());
+        // }
+        //        printf("Output is:\n%s\n", output.ToString().c_str());
+
+        // output.Initialize(context, bind_data.return_types(), STANDARD_VECTOR_SIZE);
+
+        TableFunctionInput function_input(scan_data->bind_data.get(),
+                                          scan_data->local_state.get(),
+                                          scan_data->global_state.get());
+        scan_data->table_function.function(context, function_input, output);
+
+        count = output.size();
+        scan_data->finished_chunk = count == 0;
+        // If the count is zero it could be that we should go on to the next endpoint.
+        // might want to check on filtering.
+        if (!AirportArrowScanParallelStateNext(state,
+                                               global_state,
+                                               airport_bind_data,
+                                               context))
+        {
+          scan_data->finished_chunk = true;
+          break;
+        }
       }
-    }
-    const auto &array_length = (idx_t)state.chunk->arrow_array.length;
-
-    const auto output_size =
-        MinValue<int64_t>(STANDARD_VECTOR_SIZE,
-                          array_length - state.chunk_offset);
-
-    // lines_read needs to be set on the local state rather than the bind state.
-
-    state.lines_read += output_size;
-
-    if (global_state.CanRemoveFilterColumns())
-    {
-      state.all_columns.Reset();
-      state.all_columns.SetCardinality(output_size);
-      ArrowTableFunction::ArrowToDuckDB(state,
-                                        airport_bind_data.arrow_table.GetColumns(),
-                                        state.all_columns,
-                                        state.lines_read - output_size,
-                                        false,
-                                        airport_bind_data.rowid_column_index);
-      output.ReferenceColumns(state.all_columns, global_state.projection_ids());
     }
     else
     {
-      output.SetCardinality(output_size);
-      ArrowTableFunction::ArrowToDuckDB(state,
-                                        airport_bind_data.arrow_table.GetColumns(),
-                                        output,
-                                        state.lines_read - output_size,
-                                        false,
-                                        airport_bind_data.rowid_column_index);
+
+      //! Out of tuples in this chunk
+      if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length)
+      {
+        if (!AirportArrowScanParallelStateNext(state,
+                                               global_state,
+                                               airport_bind_data,
+                                               context))
+        {
+          return;
+        }
+      }
+      const auto &array_length = (idx_t)state.chunk->arrow_array.length;
+
+      const auto output_size =
+          MinValue<int64_t>(STANDARD_VECTOR_SIZE,
+                            array_length - state.chunk_offset);
+
+      // lines_read needs to be set on the local state rather than the bind state.
+
+      state.lines_read += output_size;
+
+      if (global_state.CanRemoveFilterColumns())
+      {
+        state.all_columns.Reset();
+        state.all_columns.SetCardinality(output_size);
+        ArrowTableFunction::ArrowToDuckDB(state,
+                                          airport_bind_data.arrow_table.GetColumns(),
+                                          state.all_columns,
+                                          state.lines_read - output_size,
+                                          false,
+                                          airport_bind_data.rowid_column_index);
+        output.ReferenceColumns(state.all_columns, global_state.projection_ids());
+      }
+      else
+      {
+        output.SetCardinality(output_size);
+        ArrowTableFunction::ArrowToDuckDB(state,
+                                          airport_bind_data.arrow_table.GetColumns(),
+                                          output,
+                                          state.lines_read - output_size,
+                                          false,
+                                          airport_bind_data.rowid_column_index);
+      }
     }
 
     output.Verify();
@@ -604,7 +672,9 @@ namespace duckdb
                                   flight_client,
                                   bind_data.json_filters,
                                   input.column_ids),
-        projection_ids, scanned_types);
+        projection_ids,
+        scanned_types,
+        input);
 
     // Store the total number of endpoints in the bind data so progress
     // can be reported across all endpoints.
@@ -663,7 +733,6 @@ namespace duckdb
     local_state.chunk = std::move(current_chunk);
     local_state.Reset();
 
-    // printf("Scheme of endpoint: %s\n", location.scheme().c_str());
     if (location.scheme() == "data")
     {
       arrow::util::Uri uri;
@@ -701,9 +770,11 @@ namespace duckdb
                              server_location,
                              "File to parse msgpack encoded data uri");
 
-      if (location_data.format != "ipc-stream" && location_data.format != "ipc-file")
+      if (location_data.format != "ipc-stream" &&
+          location_data.format != "ipc-file" &&
+          location_data.format != "parquet")
       {
-        throw AirportFlightException(server_location, "Unhandled data format in data URI, should be ipc_recordbatch");
+        throw AirportFlightException(server_location, "Unhandled data format in data URI: " + location_data.format);
       }
 
       // So the location can be a URL of various types, file://, s3://, gcs://
@@ -713,50 +784,72 @@ namespace duckdb
         throw AirportFlightException(server_location, "Empty uri in data URI");
       }
 
-      std::string actual_path;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto fs,
-                                              arrow::fs::FileSystemFromUriOrPath(location_data.uri, &actual_path),
-                                              server_location,
-                                              "airport_take_flight: parsing data URI");
+      // FIX THIS.
 
-      // printf("Opening actual path: %s\n", actual_path.c_str());
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto input_file, fs->OpenInputFile(actual_path),
-                                              server_location,
-                                              "airport_take_flight: opening data URI");
-
-      if (location_data.format == "ipc-stream")
+      if (location_data.format == "parquet")
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
-            auto reader,
-            arrow::ipc::RecordBatchStreamReader::Open(input_file),
-            server_location,
-            "airport_take_flight: opening data URI")
+        auto &instance = DatabaseInstance::GetDatabase(context);
+        auto &parquet_scan_entry = ExtensionUtil::GetTableFunction(instance, "parquet_scan");
+        auto &parquet_scan = parquet_scan_entry.functions.functions[0];
 
-        if (!reader->schema()->Equals(bind_data.schema()))
-        {
-          throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
-        }
+        // So the problem here is that we need to pass the actual return_types and return_names
+        // that will be set in the output, otherwise, the output mapping is incorrect.
+        auto local_scan_data = std::make_shared<AirportLocalScanData>(
+            location_data.uri,
+            context,
+            parquet_scan,
+            bind_data.return_types(),
+            bind_data.return_names(),
+            *global_state.init_input());
 
-        auto current_chunk = make_uniq<ArrowArrayWrapper>();
-        local_state.chunk = std::move(current_chunk);
-        local_state.set_reader(std::move(reader));
+        local_state.set_reader(local_scan_data);
       }
-      else if (location_data.format == "ipc-file")
+      else if (location_data.format == "ipc-stream" || location_data.format == "ipc-file")
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
-            auto reader,
-            arrow::ipc::RecordBatchFileReader::Open(input_file),
-            server_location,
-            "airport_take_flight: opening data URI")
+        std::string actual_path;
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto fs,
+                                                arrow::fs::FileSystemFromUriOrPath(location_data.uri, &actual_path),
+                                                server_location,
+                                                "airport_take_flight: parsing data URI");
 
-        if (!reader->schema()->Equals(bind_data.schema()))
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto input_file, fs->OpenInputFile(actual_path),
+                                                server_location,
+                                                "airport_take_flight: opening data URI");
+
+        if (location_data.format == "ipc-stream")
         {
-          throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
-        }
+          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+              auto reader,
+              arrow::ipc::RecordBatchStreamReader::Open(input_file),
+              server_location,
+              "airport_take_flight: opening data URI")
 
-        auto current_chunk = make_uniq<ArrowArrayWrapper>();
-        local_state.chunk = std::move(current_chunk);
-        local_state.set_reader(std::move(reader));
+          if (!reader->schema()->Equals(bind_data.schema()))
+          {
+            throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
+          }
+
+          auto current_chunk = make_uniq<ArrowArrayWrapper>();
+          local_state.chunk = std::move(current_chunk);
+          local_state.set_reader(std::move(reader));
+        }
+        else if (location_data.format == "ipc-file")
+        {
+          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+              auto reader,
+              arrow::ipc::RecordBatchFileReader::Open(input_file),
+              server_location,
+              "airport_take_flight: opening data URI")
+
+          if (!reader->schema()->Equals(bind_data.schema()))
+          {
+            throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
+          }
+
+          auto current_chunk = make_uniq<ArrowArrayWrapper>();
+          local_state.chunk = std::move(current_chunk);
+          local_state.set_reader(std::move(reader));
+        }
       }
     }
 
@@ -807,16 +900,24 @@ namespace duckdb
       local_state.set_reader(std::move(stream));
     }
 
-    local_state.set_stream(
-        AirportProduceArrowScan(bind_data,
-                                input.column_ids,
-                                input.filters.get(),
-                                bind_data.get_progress_counter(0),
-                                // No need for the last metadata message.
-                                nullptr,
-                                bind_data.schema(),
-                                bind_data,
-                                local_state));
+    if (!std::holds_alternative<std::shared_ptr<AirportLocalScanData>>(local_state.reader()))
+    {
+      local_state.set_stream(
+          AirportProduceArrowScan(bind_data,
+                                  input.column_ids,
+                                  input.filters.get(),
+                                  bind_data.get_progress_counter(0),
+                                  // No need for the last metadata message.
+                                  nullptr,
+                                  bind_data.schema(),
+                                  bind_data,
+                                  local_state));
+    }
+    else
+    {
+      // If we're using a scan function, no need to create an arrow stream.
+      local_state.set_stream(nullptr);
+    }
 
     local_state.column_ids = input.column_ids;
     local_state.filters = (TableFilterSet *)input.filters.get();

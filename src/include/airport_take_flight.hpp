@@ -24,11 +24,20 @@ namespace duckdb
     // If there is a list of endpoints this constructor it used.
     AirportArrowScanGlobalState(const vector<flight::FlightEndpoint> &endpoints,
                                 const vector<idx_t> &projection_ids,
-                                const vector<LogicalType> &scanned_types)
+                                const vector<LogicalType> &scanned_types,
+                                const std::optional<TableFunctionInitInput> &input)
         : endpoints_(endpoints),
           projection_ids_(projection_ids),
-          scanned_types_(scanned_types)
+          scanned_types_(scanned_types),
+          init_input_(input)
     {
+      if (init_input_)
+      {
+        if (init_input_->filters)
+        {
+          init_input_->filters = init_input_->filters->Copy();
+        }
+      }
     }
 
     // There are cases where a list of endpoints isn't available, for example
@@ -62,11 +71,17 @@ namespace duckdb
       return scanned_types_;
     }
 
+    const std::optional<TableFunctionInitInput> &init_input() const
+    {
+      return init_input_;
+    }
+
   private:
     vector<flight::FlightEndpoint> endpoints_;
     std::atomic<size_t> current_endpoint_ = 0;
     const vector<idx_t> projection_ids_;
     const vector<LogicalType> scanned_types_;
+    std::optional<TableFunctionInitInput> init_input_ = std::nullopt;
   };
 
   shared_ptr<ArrowArrayStreamWrapper> AirportProduceArrowScan(
