@@ -121,11 +121,46 @@ namespace duckdb
     std::unordered_map<string, std::vector<string>> user_supplied_headers_;
   };
 
+  struct AirportDuckDBFunctionCall
+  {
+    std::string function_name;
+    // This is the serialized Arrow IPC table containing
+    // both the arguments and the named parameters for the function
+    // call.
+    std::string data;
+
+    MSGPACK_DEFINE_MAP(function_name, data)
+  };
+
   struct AirportArrowScanGlobalState;
+
+  struct AirportDuckDBFunctionCallParsed
+  {
+    vector<Value> argument_values;
+    named_parameter_map_t named_params;
+    TableFunction func;
+
+    explicit AirportDuckDBFunctionCallParsed(
+        const vector<Value> &argument_values,
+        const named_parameter_map_t &named_params,
+        TableFunction func)
+        : argument_values(std::move(argument_values)),
+          named_params(std::move(named_params)),
+          func(std::move(func))
+    {
+    }
+  };
+
+  struct AirportTakeFlightBindData;
+
+  AirportDuckDBFunctionCallParsed AirportParseFunctionCallDetails(
+      const AirportDuckDBFunctionCall &function_call_data,
+      ClientContext &context,
+      const AirportTakeFlightBindData &bind_data);
 
   struct AirportLocalScanData
   {
-    TableFunction &table_function;
+    TableFunction table_function;
     unique_ptr<FunctionData> bind_data;
     unique_ptr<GlobalTableFunctionState> global_state;
     unique_ptr<LocalTableFunctionState> local_state;
@@ -144,6 +179,15 @@ namespace duckdb
                                   const vector<LogicalType> &expected_return_types,
                                   const vector<string> &expected_return_names,
                                   const TableFunctionInitInput &init_input);
+
+    explicit AirportLocalScanData(vector<Value> argument_values,
+                                  named_parameter_map_t named_params,
+                                  ClientContext &context,
+                                  TableFunction &func,
+                                  const vector<LogicalType> &expected_return_types,
+                                  const vector<string> &expected_return_names,
+                                  const TableFunctionInitInput &init_input);
+
     bool finished_chunk;
   };
 

@@ -13,7 +13,14 @@
 #include <iostream>
 #include <memory>
 #include <arrow/buffer.h>
+#include <arrow/filesystem/api.h>
+#include <arrow/filesystem/localfs.h>
+#include <arrow/flight/client.h>
+#include <arrow/flight/types.h>
+#include <arrow/io/api.h>
+#include <arrow/ipc/api.h>
 #include <arrow/util/align_util.h>
+#include <arrow/util/uri.h>
 #include "msgpack.hpp"
 #include "airport_secrets.hpp"
 #include "airport_location_descriptor.hpp"
@@ -30,23 +37,190 @@ namespace duckdb
                                              const vector<LogicalType> &expected_return_types,
                                              const vector<string> &expected_return_names,
                                              const TableFunctionInitInput &init_input)
+      : AirportLocalScanData({uri}, {}, context, func, expected_return_types, expected_return_names, init_input)
+  {
+  }
+
+  AirportDuckDBFunctionCallParsed AirportParseFunctionCallDetails(
+      const AirportDuckDBFunctionCall &function_call_data,
+      ClientContext &context,
+      const AirportTakeFlightBindData &bind_data)
+  {
+    auto &instance = DatabaseInstance::GetDatabase(context);
+
+    // This should raise an error if the function is unknown.
+    auto &function_entry = ExtensionUtil::GetTableFunction(instance, function_call_data.function_name);
+
+    // Now we need to deserialize the Arrow table that was serialized.
+    // in IPC format and convert it to a DuckDB DataChunk so we can
+    // get the values to pass to the function as arguments and named parameters.
+
+    auto buffer_reader = std::make_shared<arrow::io::BufferReader>(function_call_data.data);
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+        auto arg_reader,
+        arrow::ipc::RecordBatchStreamReader::Open(buffer_reader),
+        (&bind_data),
+        "airport_take_flight: failed to read DuckDB function call arguments arrow table");
+
+    // Now we need to get the schema from the reader.
+    auto const arg_schema = arg_reader->schema();
+
+    // All of the arguments are named arg_0, arg_1, we need to get a list of logical types
+    // for all of the arguments.
+
+    // Export the schema to the C api.
+    ArrowSchemaWrapper schema_root;
+
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
+        ExportSchema(*arg_schema, &schema_root.arrow_schema),
+        (&bind_data),
+        "ExportSchema");
+
+    auto &config = DBConfig::GetConfig(context);
+
+    // Store all of the types of the arguments.
+    vector<LogicalType> arg_types;
+    vector<idx_t> arg_indexes;
+
+    vector<LogicalType> all_types;
+
+    vector<std::string> parameter_names;
+    vector<idx_t> named_parameter_indexes;
+
+    ArrowTableType arrow_table;
+
+    for (int arg_index = 0;; ++arg_index)
+    {
+      const std::string column_name = "arg_" + std::to_string(arg_index);
+      int col_index = arg_schema->GetFieldIndex(column_name);
+
+      if (col_index == -1)
+      {
+        break; // No more argument columns
+      }
+
+      auto &schema_item = *schema_root.arrow_schema.children[col_index];
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema_item);
+
+      if (schema_item.dictionary)
+      {
+        auto dict_type = ArrowType::GetArrowLogicalType(config, *schema_item.dictionary);
+        arrow_type->SetDictionary(std::move(dict_type));
+      }
+
+      arg_types.push_back(arrow_type->GetDuckType());
+      arg_indexes.push_back(col_index);
+    }
+
+    for (idx_t col_index = 0; col_index < schema_root.arrow_schema.n_children; col_index++)
+    {
+      auto &schema_item = *schema_root.arrow_schema.children[col_index];
+
+      auto arrow_type = ArrowType::GetArrowLogicalType(config, schema_item);
+
+      if (schema_item.dictionary)
+      {
+        auto dictionary_type = ArrowType::GetArrowLogicalType(config, *schema_item.dictionary);
+        arrow_type->SetDictionary(std::move(dictionary_type));
+      }
+
+      all_types.push_back(arrow_type->GetDuckType());
+      arrow_table.AddColumn(col_index, std::move(arrow_type));
+
+      // Skip things that are named parameters.
+      if (memcmp(schema_item.name, "arg_", 4) == 0)
+      {
+        continue;
+      }
+
+      parameter_names.push_back(string(schema_item.name));
+      named_parameter_indexes.push_back(col_index);
+    }
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+        std::shared_ptr<arrow::RecordBatch> batch,
+        arg_reader->Next(),
+        (&bind_data),
+        "Failed to read batch from DuckDB function call arguments arrow table")
+
+    ArrowSchema c_schema;
+
+    auto current_chunk = make_uniq<ArrowArrayWrapper>();
+
+    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
+        arrow::ExportRecordBatch(*batch, &current_chunk->arrow_array, &c_schema),
+        (&bind_data),
+        "Failed to export record batch from DuckDB function call arguments arrow table");
+
+    // Extract the values.
+    DataChunk args_and_parameters_chunk;
+    args_and_parameters_chunk.Initialize(Allocator::Get(context),
+                                         all_types,
+                                         current_chunk->arrow_array.length);
+
+    args_and_parameters_chunk.SetCardinality(current_chunk->arrow_array.length);
+
+    D_ASSERT(current_chunk->arrow_array.length == 1);
+
+    ArrowScanLocalState fake_local_state(
+        std::move(current_chunk),
+        context);
+
+    ArrowTableFunction::ArrowToDuckDB(fake_local_state,
+                                      arrow_table.GetColumns(),
+                                      args_and_parameters_chunk,
+                                      0,
+                                      false);
+
+    args_and_parameters_chunk.Verify();
+
+    // Try to find the function with the arguments.
+    auto scan_function = function_entry.functions.GetFunctionByArguments(context, arg_types);
+
+    // Now get the values and build up the named parameters.
+    vector<Value> argument_values;
+    for (const auto &col_idx : arg_indexes)
+    {
+      auto &column = args_and_parameters_chunk.data[col_idx];
+      argument_values.push_back(column.GetValue(0));
+    }
+
+    // Now we need to get the named parameters.
+    named_parameter_map_t named_params;
+    for (idx_t parameter_idx = 0; parameter_idx < named_parameter_indexes.size(); parameter_idx++)
+    {
+      named_params[parameter_names[parameter_idx]] = args_and_parameters_chunk.data[named_parameter_indexes[parameter_idx]].GetValue(0);
+    }
+
+    AirportDuckDBFunctionCallParsed result(
+        argument_values,
+        named_params,
+        scan_function);
+    return result;
+  }
+
+  AirportLocalScanData::AirportLocalScanData(
+      vector<Value> argument_values,
+      named_parameter_map_t named_params,
+      ClientContext &context,
+      TableFunction &func,
+      const vector<LogicalType> &expected_return_types,
+      const vector<string> &expected_return_names,
+      const TableFunctionInitInput &init_input)
       : table_function(func),
         thread_context(context),
         execution_context(context, thread_context, nullptr),
         finished_chunk(false)
   {
-    vector<Value> children;
-    children.reserve(1);
-    children.push_back(Value(uri));
-    named_parameter_map_t named_params;
     vector<LogicalType> input_types;
     vector<string> input_names;
 
     TableFunctionRef empty;
     TableFunction dummy_table_function;
-    dummy_table_function.name = "AirportEndpointParquetScan";
+    dummy_table_function.name = "AirportEndpointScan";
     TableFunctionBindInput bind_input(
-        children,
+        argument_values,
         named_params,
         input_types,
         input_names,

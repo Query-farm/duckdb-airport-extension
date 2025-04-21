@@ -263,11 +263,10 @@ namespace duckdb
     state.batch_index++; //= ++parallel_state.batch_index;
 
     bool finished_chunk = false;
-
-    if (!state.stream())
+    auto &reader = state.reader();
+    if (std::holds_alternative<std::shared_ptr<AirportLocalScanData>>(reader))
     {
-
-      auto &scan_data = std::get<std::shared_ptr<AirportLocalScanData>>(state.reader());
+      auto &scan_data = std::get<std::shared_ptr<AirportLocalScanData>>(reader);
       if (scan_data->finished_chunk)
       {
         finished_chunk = true;
@@ -289,24 +288,88 @@ namespace duckdb
     if (finished_chunk)
     {
       auto &endpoint_opt = global_state.GetNextEndpoint();
-      if (!endpoint_opt)
+      if (endpoint_opt)
       {
-        return false;
-      }
-
-      if (AirportLocalStateProcessEndpoint(context,
-                                           state.input(),
-                                           bind_data,
-                                           global_state,
-                                           state,
-                                           *endpoint_opt))
-      {
-        return true;
+        if (AirportLocalStateProcessEndpoint(context,
+                                             state.input(),
+                                             bind_data,
+                                             global_state,
+                                             state,
+                                             *endpoint_opt))
+        {
+          return true;
+        }
       }
       state.done = true;
       return false;
     }
     return true;
+  }
+
+  static void AirportDataFromLocalScanFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)
+  {
+    auto &state = data_p.local_state->Cast<AirportArrowScanLocalState>();
+
+    auto &reader = state.reader();
+
+    D_ASSERT(std::holds_alternative<std::shared_ptr<AirportLocalScanData>>(reader));
+
+    auto &scan_data = std::get<std::shared_ptr<AirportLocalScanData>>(reader);
+
+    TableFunctionInput function_input(scan_data->bind_data.get(),
+                                      scan_data->local_state.get(),
+                                      scan_data->global_state.get());
+    scan_data->table_function.function(context, function_input, output);
+
+    auto count = output.size();
+    scan_data->finished_chunk = count == 0;
+    output.Verify();
+  }
+
+  static void AirportDataFromStream(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)
+  {
+    auto &state = data_p.local_state->Cast<AirportArrowScanLocalState>();
+    auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
+    auto &airport_bind_data = data_p.bind_data->CastNoConst<AirportTakeFlightBindData>();
+    auto &reader = state.reader();
+
+    D_ASSERT(!std::holds_alternative<std::shared_ptr<AirportLocalScanData>>(reader));
+
+    const auto &array_length = (idx_t)state.chunk->arrow_array.length;
+
+    const auto output_size =
+        MinValue<int64_t>(STANDARD_VECTOR_SIZE,
+                          array_length - state.chunk_offset);
+
+    // lines_read needs to be set on the local state rather than the bind state.
+
+    state.lines_read += output_size;
+
+    if (global_state.CanRemoveFilterColumns())
+    {
+      state.all_columns.Reset();
+      state.all_columns.SetCardinality(output_size);
+      ArrowTableFunction::ArrowToDuckDB(state,
+                                        airport_bind_data.arrow_table.GetColumns(),
+                                        state.all_columns,
+                                        state.lines_read - output_size,
+                                        false,
+                                        airport_bind_data.rowid_column_index);
+      output.ReferenceColumns(state.all_columns, global_state.projection_ids());
+    }
+    else
+    {
+      output.SetCardinality(output_size);
+      ArrowTableFunction::ArrowToDuckDB(state,
+                                        airport_bind_data.arrow_table.GetColumns(),
+                                        output,
+                                        state.lines_read - output_size,
+                                        false,
+                                        airport_bind_data.rowid_column_index);
+    }
+
+    state.chunk_offset += output.size();
+    output.Verify();
   }
 
   void AirportTakeFlight(ClientContext &context, TableFunctionInput &data_p, DataChunk &output)
@@ -315,96 +378,32 @@ namespace duckdb
     auto &global_state = data_p.global_state->Cast<AirportArrowScanGlobalState>();
     auto &airport_bind_data = data_p.bind_data->CastNoConst<AirportTakeFlightBindData>();
 
-    if (!state.stream())
+    while (true)
     {
-      idx_t count = 0;
-      while (count == 0)
+      auto &reader = state.reader();
+      const auto has_local_scan = std::holds_alternative<std::shared_ptr<AirportLocalScanData>>(reader);
+      if (has_local_scan)
       {
-        auto &scan_data = std::get<std::shared_ptr<AirportLocalScanData>>(state.reader());
-
-        // So the actual columns being returned are different compared to the columns
-        // available in the output, where is that change happening and how can we get
-        // that data?
-
-        // auto &return_types = airport_bind_data.return_types();
-        // auto &output_names = airport_bind_data.return_names();
-        // for (idx_t i = 0; i < return_types.size(); i++)
-        // {
-        //   printf("Output column %llu: type=%s name=%s\n", i, return_types[i].ToString().c_str(), output_names[i].c_str());
-        // }
-        //        printf("Output is:\n%s\n", output.ToString().c_str());
-
-        // output.Initialize(context, bind_data.return_types(), STANDARD_VECTOR_SIZE);
-
-        TableFunctionInput function_input(scan_data->bind_data.get(),
-                                          scan_data->local_state.get(),
-                                          scan_data->global_state.get());
-        scan_data->table_function.function(context, function_input, output);
-
-        count = output.size();
-        scan_data->finished_chunk = count == 0;
-        // If the count is zero it could be that we should go on to the next endpoint.
-        // might want to check on filtering.
-        if (!AirportArrowScanParallelStateNext(state,
-                                               global_state,
-                                               airport_bind_data,
-                                               context))
-        {
-          scan_data->finished_chunk = true;
-          break;
-        }
-      }
-    }
-    else
-    {
-
-      //! Out of tuples in this chunk
-      if (state.chunk_offset >= (idx_t)state.chunk->arrow_array.length)
-      {
-        if (!AirportArrowScanParallelStateNext(state,
-                                               global_state,
-                                               airport_bind_data,
-                                               context))
-        {
-          return;
-        }
-      }
-      const auto &array_length = (idx_t)state.chunk->arrow_array.length;
-
-      const auto output_size =
-          MinValue<int64_t>(STANDARD_VECTOR_SIZE,
-                            array_length - state.chunk_offset);
-
-      // lines_read needs to be set on the local state rather than the bind state.
-
-      state.lines_read += output_size;
-
-      if (global_state.CanRemoveFilterColumns())
-      {
-        state.all_columns.Reset();
-        state.all_columns.SetCardinality(output_size);
-        ArrowTableFunction::ArrowToDuckDB(state,
-                                          airport_bind_data.arrow_table.GetColumns(),
-                                          state.all_columns,
-                                          state.lines_read - output_size,
-                                          false,
-                                          airport_bind_data.rowid_column_index);
-        output.ReferenceColumns(state.all_columns, global_state.projection_ids());
+        AirportDataFromLocalScanFunction(context, data_p, output);
       }
       else
       {
-        output.SetCardinality(output_size);
-        ArrowTableFunction::ArrowToDuckDB(state,
-                                          airport_bind_data.arrow_table.GetColumns(),
-                                          output,
-                                          state.lines_read - output_size,
-                                          false,
-                                          airport_bind_data.rowid_column_index);
+        AirportDataFromStream(context, data_p, output);
+      }
+
+      if (output.size() != 0)
+      {
+        break;
+      }
+
+      if (!AirportArrowScanParallelStateNext(state,
+                                             global_state,
+                                             airport_bind_data,
+                                             context))
+      {
+        break;
       }
     }
-
-    output.Verify();
-    state.chunk_offset += output.size();
   }
 
   static unique_ptr<NodeStatistics> airport_take_flight_cardinality(ClientContext &context, const FunctionData *data)
@@ -727,10 +726,9 @@ namespace duckdb
 
     auto server_location = location.ToString();
 
-    auto current_chunk = make_uniq<ArrowArrayWrapper>();
     local_state.lines_read = 0;
     local_state.chunk_offset = 0;
-    local_state.chunk = std::move(current_chunk);
+    local_state.chunk = make_uniq<ArrowArrayWrapper>();
     local_state.Reset();
 
     if (location.scheme() == "data")
@@ -754,101 +752,129 @@ namespace duckdb
 
       std::string media_type = path.substr(0, comma_pos); // application/msgpack;base64
 
-      if (media_type != "application/msgpack;base64")
+      if (media_type != "application/msgpack;base64" &&
+          media_type != "application/x-msgpack-duckdb-function-call;base64")
       {
-        throw AirportFlightException(server_location, "Invalid media type in data URI, should be application/msgpack;base64");
+        throw AirportFlightException(server_location, "Invalid media type in data URI, should be application/msgpack;base64 or application/x-msgpack-duckdb-function-call;base64");
       }
 
       std::string base64_payload = path.substr(comma_pos + 1); // base64 encoded data
 
       std::vector<uint8_t> decoded = base64_decode(base64_payload);
 
-      // Now deal with the msgpack stuff.
-      AIRPORT_MSGPACK_UNPACK(LocationDataContents,
-                             location_data,
-                             decoded,
-                             server_location,
-                             "File to parse msgpack encoded data uri");
-
-      if (location_data.format != "ipc-stream" &&
-          location_data.format != "ipc-file" &&
-          location_data.format != "parquet")
+      if (media_type == "application/x-msgpack-duckdb-function-call;base64")
       {
-        throw AirportFlightException(server_location, "Unhandled data format in data URI: " + location_data.format);
-      }
+        // Now deal with the msgpack stuff.
+        AIRPORT_MSGPACK_UNPACK_CONTAINER(AirportDuckDBFunctionCall,
+                                         function_call_data,
+                                         decoded,
+                                         (&bind_data),
+                                         "File to parse msgpack encoded DuckDB function call");
 
-      // So the location can be a URL of various types, file://, s3://, gcs://
+        D_ASSERT(!function_call_data.function_name.empty());
+        D_ASSERT(!function_call_data.data.empty());
 
-      if (location_data.uri.empty())
-      {
-        throw AirportFlightException(server_location, "Empty uri in data URI");
-      }
-
-      // FIX THIS.
-
-      if (location_data.format == "parquet")
-      {
-        auto &instance = DatabaseInstance::GetDatabase(context);
-        auto &parquet_scan_entry = ExtensionUtil::GetTableFunction(instance, "parquet_scan");
-        auto &parquet_scan = parquet_scan_entry.functions.functions[0];
-
-        // So the problem here is that we need to pass the actual return_types and return_names
-        // that will be set in the output, otherwise, the output mapping is incorrect.
-        auto local_scan_data = std::make_shared<AirportLocalScanData>(
-            location_data.uri,
+        auto parsed_info = AirportParseFunctionCallDetails(
+            function_call_data,
             context,
-            parquet_scan,
+            bind_data);
+
+        auto local_scan_data = std::make_shared<AirportLocalScanData>(
+            parsed_info.argument_values,
+            parsed_info.named_params,
+            context,
+            parsed_info.func,
             bind_data.return_types(),
             bind_data.return_names(),
             *global_state.init_input());
 
         local_state.set_reader(local_scan_data);
       }
-      else if (location_data.format == "ipc-stream" || location_data.format == "ipc-file")
+      else
       {
-        std::string actual_path;
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto fs,
-                                                arrow::fs::FileSystemFromUriOrPath(location_data.uri, &actual_path),
-                                                server_location,
-                                                "airport_take_flight: parsing data URI");
+        // Now deal with the msgpack stuff.
+        AIRPORT_MSGPACK_UNPACK(LocationDataContents,
+                               location_data,
+                               decoded,
+                               server_location,
+                               "File to parse msgpack encoded data uri");
 
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto input_file, fs->OpenInputFile(actual_path),
-                                                server_location,
-                                                "airport_take_flight: opening data URI");
-
-        if (location_data.format == "ipc-stream")
+        if (location_data.format != "ipc-stream" &&
+            location_data.format != "ipc-file" &&
+            location_data.format != "parquet")
         {
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
-              auto reader,
-              arrow::ipc::RecordBatchStreamReader::Open(input_file),
-              server_location,
-              "airport_take_flight: opening data URI")
-
-          if (!reader->schema()->Equals(bind_data.schema()))
-          {
-            throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
-          }
-
-          auto current_chunk = make_uniq<ArrowArrayWrapper>();
-          local_state.chunk = std::move(current_chunk);
-          local_state.set_reader(std::move(reader));
+          throw AirportFlightException(server_location, "Unhandled data format in data URI: " + location_data.format);
         }
-        else if (location_data.format == "ipc-file")
+
+        // So the location can be a URL of various types, file://, s3://, gcs://
+
+        if (location_data.uri.empty())
         {
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
-              auto reader,
-              arrow::ipc::RecordBatchFileReader::Open(input_file),
-              server_location,
-              "airport_take_flight: opening data URI")
+          throw AirportFlightException(server_location, "Empty uri in data URI");
+        }
 
-          if (!reader->schema()->Equals(bind_data.schema()))
+        // FIX THIS.
+
+        if (location_data.format == "parquet")
+        {
+          auto &instance = DatabaseInstance::GetDatabase(context);
+          auto &parquet_scan_entry = ExtensionUtil::GetTableFunction(instance, "parquet_scan");
+          auto &parquet_scan = parquet_scan_entry.functions.functions[0];
+
+          // So the problem here is that we need to pass the actual return_types and return_names
+          // that will be set in the output, otherwise, the output mapping is incorrect.
+          auto local_scan_data = std::make_shared<AirportLocalScanData>(
+              location_data.uri,
+              context,
+              parquet_scan,
+              bind_data.return_types(),
+              bind_data.return_names(),
+              *global_state.init_input());
+
+          local_state.set_reader(local_scan_data);
+        }
+        else if (location_data.format == "ipc-stream" || location_data.format == "ipc-file")
+        {
+          std::string actual_path;
+          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto fs,
+                                                  arrow::fs::FileSystemFromUriOrPath(location_data.uri, &actual_path),
+                                                  server_location,
+                                                  "airport_take_flight: parsing data URI");
+
+          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto input_file, fs->OpenInputFile(actual_path),
+                                                  server_location,
+                                                  "airport_take_flight: opening data URI");
+
+          if (location_data.format == "ipc-stream")
           {
-            throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
-          }
+            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+                auto reader,
+                arrow::ipc::RecordBatchStreamReader::Open(input_file),
+                server_location,
+                "airport_take_flight: opening data URI")
 
-          auto current_chunk = make_uniq<ArrowArrayWrapper>();
-          local_state.chunk = std::move(current_chunk);
-          local_state.set_reader(std::move(reader));
+            if (!reader->schema()->Equals(bind_data.schema()))
+            {
+              throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
+            }
+
+            local_state.set_reader(std::move(reader));
+          }
+          else if (location_data.format == "ipc-file")
+          {
+            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+                auto reader,
+                arrow::ipc::RecordBatchFileReader::Open(input_file),
+                server_location,
+                "airport_take_flight: opening data URI")
+
+            if (!reader->schema()->Equals(bind_data.schema()))
+            {
+              throw AirportFlightException(server_location, "Schema of data at" + location_data.uri + " does not match expected schema.");
+            }
+
+            local_state.set_reader(std::move(reader));
+          }
         }
       }
     }
@@ -1039,5 +1065,4 @@ namespace duckdb
     }
     return name;
   }
-
 }
