@@ -464,7 +464,7 @@ namespace duckdb
     auto &server_location = airport_catalog.attach_parameters()->location();
     auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
-    AirportRenameTableParameters params(info);
+    AirportAlterTableRenameParameters params(info);
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "rename_table", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
@@ -488,7 +488,7 @@ namespace duckdb
     auto &server_location = airport_catalog.attach_parameters()->location();
     auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
-    AirportRenameTableColumnParameters params(info);
+    AirportAlterTableRenameColumnParameters params(info);
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "rename_column", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
@@ -512,7 +512,7 @@ namespace duckdb
     auto &server_location = airport_catalog.attach_parameters()->location();
     auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
-    AirportAddTableColumnParameters params(info, context, server_location);
+    AirportAlterTableAddColumnParameters params(info, context, server_location);
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_column", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
@@ -617,7 +617,7 @@ namespace duckdb
     {
       auto &add_info = alter.Cast<AddColumnInfo>();
 
-      AirportAddTableColumnParameters params(add_info, context, server_location);
+      AirportAlterTableAddColumnParameters params(add_info, context, server_location);
       call_options.headers.emplace_back("airport-action-name", "add_column");
       AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_column", params);
       std::unique_ptr<arrow::flight::ResultStream> action_results;

@@ -26,33 +26,33 @@ namespace duckdb
     }
   };
 
-  struct AirportRenameTableParameters : AirportAlterBase
+  struct AirportAlterTableRenameParameters : AirportAlterBase
   {
     std::string new_table_name;
 
-    explicit AirportRenameTableParameters(const RenameTableInfo &info) : AirportAlterBase(info),
-                                                                         new_table_name(info.new_table_name)
+    explicit AirportAlterTableRenameParameters(const RenameTableInfo &info) : AirportAlterBase(info),
+                                                                              new_table_name(info.new_table_name)
     {
     }
 
     MSGPACK_DEFINE_MAP(catalog, schema, name, ignore_not_found, new_table_name);
   };
 
-  struct AirportRenameTableColumnParameters : AirportAlterBase
+  struct AirportAlterTableRenameColumnParameters : AirportAlterBase
   {
     std::string old_name;
     std::string new_name;
 
-    explicit AirportRenameTableColumnParameters(const RenameColumnInfo &info) : AirportAlterBase(info),
-                                                                                old_name(info.old_name),
-                                                                                new_name(info.new_name)
+    explicit AirportAlterTableRenameColumnParameters(const RenameColumnInfo &info) : AirportAlterBase(info),
+                                                                                     old_name(info.old_name),
+                                                                                     new_name(info.new_name)
     {
     }
 
     MSGPACK_DEFINE_MAP(catalog, schema, name, ignore_not_found, new_name, old_name);
   };
 
-  struct AirportAddTableColumnParameters : AirportAlterBase
+  struct AirportAlterTableAddColumnParameters : AirportAlterBase
   {
     // How to serialize the type of the column, well we want to use a Arrow schema it seems
     // like with just a single field.
@@ -61,8 +61,8 @@ namespace duckdb
     //    unordered_map<std::string, std::string> tags;
     bool if_column_not_exists;
 
-    explicit AirportAddTableColumnParameters(const AddColumnInfo &info, ClientContext &context,
-                                             const std::string &server_location)
+    explicit AirportAlterTableAddColumnParameters(const AddColumnInfo &info, ClientContext &context,
+                                                  const std::string &server_location)
         : AirportAlterBase(info),
           if_column_not_exists(info.if_column_not_exists)
     {
@@ -166,21 +166,6 @@ namespace duckdb
     {
     }
     MSGPACK_DEFINE_MAP(catalog, schema, name, ignore_not_found, column_path, if_column_exists, cascade);
-  };
-
-  struct AirportAlterTableRenameColumnParameters : AirportAlterBase
-  {
-    std::string old_name;
-    std::string new_name;
-
-    explicit AirportAlterTableRenameColumnParameters(const RenameColumnInfo &info)
-        : AirportAlterBase(info),
-          old_name(info.old_name),
-          new_name(info.new_name)
-    {
-    }
-
-    MSGPACK_DEFINE_MAP(catalog, schema, name, old_name, new_name);
   };
 
   struct AirportAlterTableRenameFieldParameters : AirportAlterBase
