@@ -40,6 +40,7 @@
 #include "storage/airport_table_set.hpp"
 #include "storage/airport_transaction.hpp"
 #include "airport_schema_utils.h"
+#include "storage/airport_alter_parameters.hpp"
 
 struct FunctionCatalogSchemaName
 {
@@ -448,29 +449,274 @@ namespace duckdb
     return CreateEntry(std::move(table_entry));
   }
 
-  void AirportTableSet::AlterTable(ClientContext &context, RenameTableInfo &info)
+  void
+  AirportTableSet::AlterTable(ClientContext &context, RenameTableInfo &info)
   {
-    throw NotImplementedException("AirportTableSet::AlterTable");
+    auto &airport_catalog = catalog.Cast<AirportCatalog>();
+
+    arrow::flight::FlightCallOptions call_options;
+
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
+
+    call_options.headers.emplace_back("airport-action-name", "rename_table");
+
+    auto &server_location = airport_catalog.attach_parameters()->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
+
+    AirportRenameTableParameters params(info);
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "rename_table", params);
+
+    std::unique_ptr<arrow::flight::ResultStream> action_results;
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
   void AirportTableSet::AlterTable(ClientContext &context, RenameColumnInfo &info)
   {
-    throw NotImplementedException("AirportTableSet::AlterTable");
+    auto &airport_catalog = catalog.Cast<AirportCatalog>();
+
+    arrow::flight::FlightCallOptions call_options;
+
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
+
+    call_options.headers.emplace_back("airport-action-name", "rename_column");
+
+    auto &server_location = airport_catalog.attach_parameters()->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
+
+    AirportRenameTableColumnParameters params(info);
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "rename_column", params);
+
+    std::unique_ptr<arrow::flight::ResultStream> action_results;
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
   void AirportTableSet::AlterTable(ClientContext &context, AddColumnInfo &info)
   {
-    throw NotImplementedException("AirportTableSet::AlterTable");
+    auto &airport_catalog = catalog.Cast<AirportCatalog>();
+
+    arrow::flight::FlightCallOptions call_options;
+
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
+
+    call_options.headers.emplace_back("airport-action-name", "add_column");
+
+    auto &server_location = airport_catalog.attach_parameters()->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
+
+    AirportAddTableColumnParameters params(info, context, server_location);
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_column", params);
+
+    std::unique_ptr<arrow::flight::ResultStream> action_results;
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
   void AirportTableSet::AlterTable(ClientContext &context, RemoveColumnInfo &info)
   {
-    throw NotImplementedException("AirportTableSet::AlterTable");
+    auto &airport_catalog = catalog.Cast<AirportCatalog>();
+
+    arrow::flight::FlightCallOptions call_options;
+
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
+
+    call_options.headers.emplace_back("airport-action-name", "remove_column");
+
+    auto &server_location = airport_catalog.attach_parameters()->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
+
+    AirportRemoveTableColumnParameters params(info);
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "remove_column", params);
+
+    std::unique_ptr<arrow::flight::ResultStream> action_results;
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+
+    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
   void AirportTableSet::AlterTable(ClientContext &context, AlterTableInfo &alter)
   {
-    throw NotImplementedException("AirportTableSet::AlterTable");
+    auto &airport_catalog = catalog.Cast<AirportCatalog>();
+
+    arrow::flight::FlightCallOptions call_options;
+
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
+
+    auto &server_location = airport_catalog.attach_parameters()->location();
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
+
+    // if (alter.type == AlterType::SET_COLUMN_COMMENT)
+    // {
+    //   auto &comment_on_column_info = info.Cast<SetColumnCommentInfo>();
+    //   return SetColumnComment(context, comment_on_column_info);
+    // }
+
+    D_ASSERT(alter.type == AlterType::ALTER_TABLE);
+
+    if (alter.type != AlterType::ALTER_TABLE)
+    {
+      throw CatalogException("Can only modify table with ALTER TABLE statement");
+    }
+
+    auto perform_simple_action = [&](const std::string &action_name, const auto &info, auto &&make_params)
+    {
+      auto params = make_params(info);
+      call_options.headers.emplace_back("airport-action-name", action_name);
+      AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, action_name, params);
+      std::unique_ptr<arrow::flight::ResultStream> action_results;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+          action_results,
+          flight_client->DoAction(call_options, action),
+          server_location,
+          "airport_alter_table: " + action_name);
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+          auto flight_info_buffer,
+          action_results->Next(),
+          server_location,
+          "");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
+    };
+
+    switch (alter.alter_table_type)
+    {
+    case AlterTableType::RENAME_COLUMN:
+    {
+      auto &rename_info = alter.Cast<RenameColumnInfo>();
+      perform_simple_action("rename_column", rename_info, [](const auto &i)
+                            { return AirportAlterTableRenameColumnParameters(i); });
+      break;
+    }
+    case AlterTableType::RENAME_FIELD:
+    {
+      auto &rename_info = alter.Cast<RenameFieldInfo>();
+      perform_simple_action("rename_field", rename_info, [](const auto &i)
+                            { return AirportAlterTableRenameFieldParameters(i); });
+      break;
+    }
+    case AlterTableType::RENAME_TABLE:
+    {
+      auto &rename_info = alter.Cast<RenameTableInfo>();
+      perform_simple_action("rename_table", rename_info, [](const auto &i)
+                            { return AirportAlterTableRenameTableParameters(i); });
+      break;
+    }
+    case AlterTableType::ADD_COLUMN:
+    {
+      auto &add_info = alter.Cast<AddColumnInfo>();
+
+      AirportAddTableColumnParameters params(add_info, context, server_location);
+      call_options.headers.emplace_back("airport-action-name", "add_column");
+      AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_column", params);
+      std::unique_ptr<arrow::flight::ResultStream> action_results;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
+      break;
+    }
+    case AlterTableType::ADD_FIELD:
+    {
+      auto &add_info = alter.Cast<AddFieldInfo>();
+      // Adding a field to a struct.
+      AirportAlterTableAddFieldParameters params(add_info, context, server_location);
+      call_options.headers.emplace_back("airport-action-name", "add_field");
+      AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_field", params);
+      std::unique_ptr<arrow::flight::ResultStream> action_results;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_alter_table_add_field");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
+      break;
+    }
+    case AlterTableType::REMOVE_COLUMN:
+    {
+      auto &remove_info = alter.Cast<RemoveColumnInfo>();
+      perform_simple_action("remove_column", remove_info, [](const auto &i)
+                            { return AirportRemoveTableColumnParameters(i); });
+      break;
+    }
+    case AlterTableType::REMOVE_FIELD:
+    {
+      auto &remove_info = alter.Cast<RemoveFieldInfo>();
+
+      perform_simple_action("remove_field", remove_info, [](const auto &i)
+                            { return AirportAlterTableRemoveFieldParameters(i); });
+      break;
+    }
+    case AlterTableType::SET_DEFAULT:
+    {
+      auto &set_default_info = alter.Cast<SetDefaultInfo>();
+
+      perform_simple_action("set_default", set_default_info, [](const auto &i)
+                            { return AirportAlterTableSetDefaultParameters(i); });
+      break;
+    }
+    case AlterTableType::ALTER_COLUMN_TYPE:
+    {
+      auto &change_type_info = alter.Cast<ChangeColumnTypeInfo>();
+
+      AirportAlterTableChangeColumnTypeParameters params(change_type_info, context, server_location);
+      call_options.headers.emplace_back("airport-action-name", "change_column_type");
+      AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "change_column_type", params);
+      std::unique_ptr<arrow::flight::ResultStream> action_results;
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_alter_change_column_type");
+      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+      AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
+      break;
+    }
+    // case AlterTableType::FOREIGN_KEY_CONSTRAINT:
+    // {
+    //   auto &foreign_key_constraint_info = alter.Cast<AlterForeignKeyInfo>();
+    //   if (foreign_key_constraint_info.type == AlterForeignKeyType::AFT_ADD)
+    //   {
+    //     return AddForeignKeyConstraint(context, foreign_key_constraint_info);
+    //   }
+    //   else
+    //   {
+    //     return DropForeignKeyConstraint(context, foreign_key_constraint_info);
+    //   }
+    // }
+    case AlterTableType::SET_NOT_NULL:
+    {
+      auto &set_not_null_info = alter.Cast<SetNotNullInfo>();
+
+      perform_simple_action("set_not_null", set_not_null_info, [](const auto &i)
+                            { return AirportAlterTableSetNotNullParameters(i); });
+      break;
+    }
+    case AlterTableType::DROP_NOT_NULL:
+    {
+      auto &drop_not_null_info = alter.Cast<DropNotNullInfo>();
+      perform_simple_action("drop_not_null", drop_not_null_info, [](const auto &i)
+                            { return AirportAlterTableDropNotNullParameters(i); });
+      break;
+    }
+    case AlterTableType::ADD_CONSTRAINT:
+    {
+      auto &add_constraint_info = alter.Cast<AddConstraintInfo>();
+
+      perform_simple_action("add_constraint", add_constraint_info, [](const auto &i)
+                            { return AirportAlterTableAddConstraintParameters(i); });
+      break;
+    }
+    // case AlterTableType::SET_PARTITIONED_BY:
+    //   throw NotImplementedException("SET PARTITIONED BY is not supported for Airport tables");
+    // case AlterTableType::SET_SORTED_BY:
+    //   throw NotImplementedException("SET SORTED BY is   not supported for Airport tables");
+    default:
+      throw InternalException("Unrecognized alter table type!");
+    }
   }
 
   // Given an Arrow schema return a vector of the LogicalTypes for that schema.
