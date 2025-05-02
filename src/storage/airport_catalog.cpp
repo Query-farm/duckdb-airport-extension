@@ -45,25 +45,25 @@ namespace duckdb
     airport_add_authorization_header(call_options, attach_parameters_->auth_token());
 
     // Might want to cache this though if a server declares the server catalog will not change.
-    arrow::flight::Action action{"get_catalog_version", arrow::Buffer::FromString(internal_name_)};
+    arrow::flight::Action action{"catalog_version", arrow::Buffer::FromString(internal_name_)};
 
     auto &server_location = attach_parameters_->location();
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client_->DoAction(call_options, action),
                                             server_location,
-                                            "calling get_catalog_version action");
+                                            "calling catalog_version action");
 
     // The only item returned is a serialized flight info.
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_catalog_version_buffer,
                                             action_results->Next(),
                                             server_location,
-                                            "reading get_catalog_version action result");
+                                            "reading catalog_version action result");
 
     AIRPORT_MSGPACK_UNPACK(AirportGetCatalogVersionResult, result,
                            (*serialized_catalog_version_buffer->body),
                            server_location,
-                           "File to parse msgpack encoded get_catalog_version response");
+                           "File to parse msgpack encoded catalog_version response");
 
     loaded_catalog_version = result;
 
