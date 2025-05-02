@@ -38,24 +38,24 @@ namespace duckdb
     airport_add_standard_headers(call_options, attach_parameters->location());
     airport_add_authorization_header(call_options, attach_parameters->auth_token());
 
-    arrow::flight::Action action{"get_transaction_identifier", arrow::Buffer::FromString(catalog_name)};
+    arrow::flight::Action action{"create_transaction", arrow::Buffer::FromString(catalog_name)};
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),
                                             server_location,
-                                            "calling get_transaction_identifier action");
+                                            "calling create_transaction action");
 
     // The only item returned is a serialized flight info.
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto result_buffer,
                                             action_results->Next(),
                                             server_location,
-                                            "reading get_transaction_identifier action result");
+                                            "reading create_transaction action result");
 
     AIRPORT_MSGPACK_UNPACK(
         GetTransactionIdentifierResult, result,
         (*(result_buffer->body)),
         server_location,
-        "File to parse msgpack encoded get_transaction_identifier response");
+        "File to parse msgpack encoded create_transaction response");
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 

@@ -59,14 +59,15 @@ namespace duckdb
     const std::shared_ptr<arrow::Schema> &schema_;
   };
 
-  struct AirportGetFlightInfoTableFunctionParameters
+  struct AirportTableFunctionFlightInfoParameters
   {
+    std::string catalog;
     std::string schema_name;
     std::string action_name;
     std::string parameters;
     std::string table_input_schema;
 
-    MSGPACK_DEFINE_MAP(schema_name, action_name, parameters, table_input_schema)
+    MSGPACK_DEFINE_MAP(catalog, schema_name, action_name, parameters, table_input_schema)
   };
 
   class AirportTakeFlightParameters
@@ -285,7 +286,7 @@ namespace duckdb
         const string &trace_id,
         const int64_t estimated_records,
         const AirportTakeFlightParameters &take_flight_params_p,
-        const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
+        const std::optional<AirportTableFunctionFlightInfoParameters> &table_function_parameters_p,
         std::shared_ptr<arrow::Schema> schema,
         const flight::FlightDescriptor &descriptor,
         shared_ptr<DependencyItem> dependency = nullptr)
@@ -334,7 +335,7 @@ namespace duckdb
       return take_flight_params_;
     }
 
-    const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters() const
+    const std::optional<AirportTableFunctionFlightInfoParameters> &table_function_parameters() const
     {
       return table_function_parameters_;
     }
@@ -413,7 +414,7 @@ namespace duckdb
     int64_t estimated_records_ = -1;
 
     const AirportTakeFlightParameters take_flight_params_;
-    const std::optional<AirportGetFlightInfoTableFunctionParameters> table_function_parameters_;
+    const std::optional<AirportTableFunctionFlightInfoParameters> table_function_parameters_;
 
     const std::shared_ptr<arrow::Schema> schema_;
 

@@ -19,7 +19,7 @@ namespace duckdb
         const string &trace_id,
         const int64_t estimated_records,
         const AirportTakeFlightParameters &take_flight_params_p,
-        const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters_p,
+        const std::optional<AirportTableFunctionFlightInfoParameters> &table_function_parameters_p,
         std::shared_ptr<arrow::Schema> schema,
         const flight::FlightDescriptor &descriptor,
         shared_ptr<DependencyItem> dependency = nullptr)

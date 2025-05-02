@@ -91,7 +91,7 @@ namespace duckdb
       vector<string> &names,
       // So rather than the cached_flight_info_ptr here we can just have the cached schema.
       std::shared_ptr<arrow::Schema> schema,
-      const std::optional<AirportGetFlightInfoTableFunctionParameters> &table_function_parameters)
+      const std::optional<AirportTableFunctionFlightInfoParameters> &table_function_parameters)
   {
     // Create a UID for tracing.
     const auto trace_uuid = airport_trace_id();
@@ -124,9 +124,9 @@ namespace duckdb
         // get the flight info that way, since it allows us to serialize
         // all of the data we need to send instead of just the flight name.
 
-        AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_flight_info_table_function", table_function_parameters);
+        AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "table_function_flight_info", table_function_parameters);
 
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_get_flight_info_table_function");
+        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_table_function_flight_info");
 
         // The only item returned is a serialized flight info.
         AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_flight_info_buffer, action_results->Next(), server_location, "reading get_flight_info for table function");

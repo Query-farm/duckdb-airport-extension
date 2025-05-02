@@ -1040,8 +1040,9 @@ namespace duckdb
     // the schema of the flight.
 
     // Then call the DoAction get_dynamic_flight_info with those arguments.
-    AirportGetFlightInfoTableFunctionParameters tf_params;
+    AirportTableFunctionFlightInfoParameters tf_params;
     tf_params.parameters = buffer->ToString();
+    tf_params.catalog = function_info.function->catalog_name();
     tf_params.schema_name = function_info.function->schema_name();
     tf_params.action_name = function_info.function->action_name();
 
