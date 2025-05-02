@@ -201,8 +201,8 @@ namespace duckdb
     params.type = duck_type.ToString();
 
     auto flight_client = AirportAPI::FlightClientForLocation(server_location);
-
-    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_flight_column_statistics", params);
+    call_options.headers.emplace_back("airport-action-name", "column_statistics");
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "column_statistics", params);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),
