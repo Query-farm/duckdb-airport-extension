@@ -534,7 +534,7 @@ namespace duckdb
   //   return compressed_str;
   // }
 
-  struct AirportTicketMetadataParameters
+  struct AirportEndpointParameters
   {
     std::string json_filters;
     std::vector<idx_t> column_ids;
@@ -561,7 +561,7 @@ namespace duckdb
   struct AirportGetFlightEndpointsRequest
   {
     std::string descriptor;
-    AirportTicketMetadataParameters parameters;
+    AirportEndpointParameters parameters;
 
     MSGPACK_DEFINE_MAP(descriptor, parameters)
   };
@@ -587,22 +587,23 @@ namespace duckdb
         endpoints_request.descriptor,
         descriptor.SerializeToString(),
         server_location,
-        "get_flight_endpoints serialize flight descriptor");
+        "get_endpoints serialize flight descriptor");
+
     endpoints_request.parameters.json_filters = json_filters;
     endpoints_request.parameters.column_ids = column_ids;
 
-    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_flight_endpoints", endpoints_request);
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "get_endpoints", endpoints_request);
 
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
                                             flight_client->DoAction(call_options, action),
                                             server_location,
-                                            "airport get_flight_endpoints action");
+                                            "airport get_endpoints action");
 
     // The only item returned is a serialized flight info.
     AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_endpoint_info_buffer,
                                             action_results->Next(),
                                             server_location,
-                                            "reading get_flight_endpoints");
+                                            "reading get_endpoints");
 
     std::string_view serialized_endpoint_info(reinterpret_cast<const char *>(serialized_endpoint_info_buffer->body->data()), serialized_endpoint_info_buffer->body->size());
 
@@ -612,7 +613,7 @@ namespace duckdb
                            server_location,
                            "File to parse msgpack encoded endpoints");
 
-    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "get_flight_endpoints drain");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "get_endpoints drain");
 
     endpoints.reserve(serialized_endpoints.size());
 
@@ -634,7 +635,7 @@ namespace duckdb
 
     // Ideally this is where we call GetFlightInfo to obtain the endpoints, but
     // GetFlightInfo can't take the predicate information, so we'll need to call an
-    // action called get_flight_endpoints.
+    // action called get_endpoints.
     //
     // FIXME: somehow the flight should be marked if it supports predicate pushdown.
     // right now I'm not sure what this is.
