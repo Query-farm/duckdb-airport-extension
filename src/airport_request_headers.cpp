@@ -4,7 +4,7 @@
 #include <numeric>
 
 // Indicate the version of the caller.
-#define AIRPORT_USER_AGENT "airport/20240820-02"
+#define AIRPORT_USER_AGENT "airport/20240820"
 
 namespace duckdb
 {
