@@ -7,7 +7,9 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
 #include "duckdb/storage/storage_extension.hpp"
-
+#include "duckdb/parser/parsed_data/create_macro_info.hpp"
+#include "duckdb/function/table_macro_function.hpp"
+#include "duckdb/catalog/default/default_functions.hpp"
 #include "storage/airport_catalog.hpp"
 #include "storage/airport_transaction_manager.hpp"
 #include "airport_secrets.hpp"
@@ -116,6 +118,69 @@ namespace duckdb
         }
     };
 
+    inline void get_user_agent(DataChunk &args, ExpressionState &state, Vector &result)
+    {
+        D_ASSERT(args.ColumnCount() == 0);
+        Value val(airport_user_agent());
+        result.Reference(val);
+    }
+
+    void AirportAddUserAgentFunction(DatabaseInstance &instance)
+    {
+        ExtensionUtil::RegisterFunction(
+            instance,
+            ScalarFunction(
+                "airport_user_agent",
+                {},
+                LogicalType::VARCHAR,
+                get_user_agent));
+    }
+
+    static void RegisterTableMacro(DatabaseInstance &db, const string &name, const string &query,
+                                   const vector<string> &params, const child_list_t<Value> &named_params)
+    {
+        Parser parser;
+        parser.ParseQuery(query);
+        const auto &stmt = parser.statements.back();
+        auto &node = stmt->Cast<SelectStatement>().node;
+
+        auto func = make_uniq<TableMacroFunction>(std::move(node));
+        for (auto &param : params)
+        {
+            func->parameters.push_back(make_uniq<ColumnRefExpression>(param));
+        }
+
+        for (auto &param : named_params)
+        {
+            func->default_parameters[param.first] = make_uniq<ConstantExpression>(param.second);
+        }
+
+        CreateMacroInfo info(CatalogType::TABLE_MACRO_ENTRY);
+        info.schema = DEFAULT_SCHEMA;
+        info.name = name;
+        info.temporary = true;
+        info.internal = true;
+        info.macros.push_back(std::move(func));
+
+        ExtensionUtil::RegisterFunction(db, info);
+    }
+
+    static void AirportAddListDatabasesMacro(DatabaseInstance &instance)
+    {
+        child_list_t<Value> named_params = {
+            {"auth_token", Value()},
+            {"secret", Value()},
+            {"headers", Value()},
+        };
+
+        RegisterTableMacro(
+            instance,
+            "airport_databases",
+            "select * from airport_take_flight(server_location, ['__databases'], auth_token=auth_token, secret=secret, headers=headers)",
+            {"server_location"},
+            named_params);
+    }
+
     static void LoadInternal(DatabaseInstance &instance)
     {
         curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -125,6 +190,12 @@ namespace duckdb
         AddListFlightsFunction(instance);
 
         AddTakeFlightFunction(instance);
+
+        // So to create a new macro for airport_list_databases
+        // that calls airport_take_flight with a fixed flight descriptor
+        // of PATH /__databases
+
+        AirportAddListDatabasesMacro(instance);
 
         SecretType secret_type;
         secret_type.name = "airport";
