@@ -40,16 +40,16 @@ namespace duckdb
 
     arrow::flight::Action action{"create_transaction", arrow::Buffer::FromString(catalog_name)};
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "calling create_transaction action");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
+                                     flight_client->DoAction(call_options, action),
+                                     server_location,
+                                     "calling create_transaction action");
 
     // The only item returned is a serialized flight info.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto result_buffer,
-                                            action_results->Next(),
-                                            server_location,
-                                            "reading create_transaction action result");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto result_buffer,
+                                     action_results->Next(),
+                                     server_location,
+                                     "reading create_transaction action result");
 
     AIRPORT_MSGPACK_UNPACK(
         GetTransactionIdentifierResult, result,

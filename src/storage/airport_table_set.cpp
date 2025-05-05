@@ -328,7 +328,7 @@ namespace duckdb
                                   column_names,
                                   client_properties);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto real_schema, arrow::ImportSchema(&schema), server_location, "");
 
     //    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata = std::make_shared<arrow::KeyValueMetadata>();
     //    AIRPORT_ARROW_ASSERT_OK_LOCATION(schema_metadata->Set("table_name", base.table), airport_catalog.attach_parameters()->location, "");
@@ -347,7 +347,7 @@ namespace duckdb
 
     auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(
         auto serialized_schema,
         arrow::ipc::SerializeSchema(*real_schema, arrow::default_memory_pool()),
         server_location,
@@ -397,9 +397,9 @@ namespace duckdb
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "create_table", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_create_table");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_create_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
 
     if (flight_info_buffer == nullptr)
     {
@@ -409,7 +409,7 @@ namespace duckdb
     std::string_view serialized_flight_info(reinterpret_cast<const char *>(flight_info_buffer->body->data()), flight_info_buffer->body->size());
 
     // Now how to we deserialize the flight info from that buffer...
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "");
 
     // We aren't interested in anything after the first result.
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
@@ -422,10 +422,10 @@ namespace duckdb
 
     std::shared_ptr<arrow::Schema> info_schema;
     arrow::ipc::DictionaryMemo dictionary_memo;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(info_schema,
-                                             flight_info->GetSchema(&dictionary_memo),
-                                             &table_location,
-                                             "");
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(info_schema,
+                                      flight_info->GetSchema(&dictionary_memo),
+                                      &table_location,
+                                      "");
 
     auto rowid_type = AirportAPI::GetRowIdType(
         context,
@@ -468,9 +468,9 @@ namespace duckdb
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "rename_table", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
@@ -492,9 +492,9 @@ namespace duckdb
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "rename_column", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
@@ -516,9 +516,9 @@ namespace duckdb
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_column", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
@@ -540,9 +540,9 @@ namespace duckdb
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "remove_column", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
   }
 
@@ -577,12 +577,12 @@ namespace duckdb
       call_options.headers.emplace_back("airport-action-name", action_name);
       AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, action_name, params);
       std::unique_ptr<arrow::flight::ResultStream> action_results;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           action_results,
           flight_client->DoAction(call_options, action),
           server_location,
           "airport_alter_table: " + action_name);
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           auto flight_info_buffer,
           action_results->Next(),
           server_location,
@@ -621,8 +621,8 @@ namespace duckdb
       call_options.headers.emplace_back("airport-action-name", "add_column");
       AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_column", params);
       std::unique_ptr<arrow::flight::ResultStream> action_results;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_rename_table");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
       AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
       break;
     }
@@ -634,8 +634,8 @@ namespace duckdb
       call_options.headers.emplace_back("airport-action-name", "add_field");
       AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "add_field", params);
       std::unique_ptr<arrow::flight::ResultStream> action_results;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_alter_table_add_field");
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_alter_table_add_field");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
       AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
       break;
     }
@@ -670,8 +670,8 @@ namespace duckdb
       call_options.headers.emplace_back("airport-action-name", "change_column_type");
       AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "change_column_type", params);
       std::unique_ptr<arrow::flight::ResultStream> action_results;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_alter_change_column_type");
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_alter_change_column_type");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info_buffer, action_results->Next(), server_location, "");
       AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
       break;
     }
@@ -991,20 +991,20 @@ namespace duckdb
 
     auto schema_without_table_fields = AirportSchemaWithoutTableFields(input_schema);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, schema_without_table_fields),
         &location_descriptor, "");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto buffer_output_stream,
-                                             arrow::io::BufferOutputStream::Create(),
-                                             &location_descriptor,
-                                             "create buffer output stream");
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto buffer_output_stream,
+                                      arrow::io::BufferOutputStream::Create(),
+                                      &location_descriptor,
+                                      "create buffer output stream");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto writer,
-                                             arrow::ipc::MakeStreamWriter(buffer_output_stream, schema_without_table_fields),
-                                             &location_descriptor,
-                                             "make stream writer");
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto writer,
+                                      arrow::ipc::MakeStreamWriter(buffer_output_stream, schema_without_table_fields),
+                                      &location_descriptor,
+                                      "make stream writer");
 
     AIRPORT_ARROW_ASSERT_OK_CONTAINER(writer->WriteRecordBatch(*record_batch),
                                       &location_descriptor,
@@ -1014,7 +1014,7 @@ namespace duckdb
                                       &location_descriptor,
                                       "close record batch writer");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto buffer,
         buffer_output_stream->Finish(),
         &location_descriptor,
@@ -1059,12 +1059,12 @@ namespace duckdb
                                     input.input_table_names,
                                     client_properties);
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto table_input_schema,
-                                               arrow::ImportSchema(&input_table_schema),
-                                               function_info.function,
-                                               "");
+      AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto table_input_schema,
+                                        arrow::ImportSchema(&input_table_schema),
+                                        function_info.function,
+                                        "");
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+      AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
           auto serialized_schema,
           arrow::ipc::SerializeSchema(*table_input_schema, arrow::default_memory_pool()),
           function_info.function,
@@ -1197,7 +1197,7 @@ namespace duckdb
 
     auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto exchange_result,
         flight_client->DoExchange(call_options, bind_data.descriptor()),
         &bind_data, "");
@@ -1211,7 +1211,7 @@ namespace duckdb
     auto buffer_reader = std::make_shared<arrow::io::BufferReader>(serialized_schema_buffer);
 
     arrow::ipc::DictionaryMemo in_memo;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto send_schema,
         arrow::ipc::ReadSchema(buffer_reader.get(), &in_memo),
         &bind_data, "ReadSchema");
@@ -1234,10 +1234,10 @@ namespace duckdb
 
     vector<column_t> column_ids;
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                             exchange_result.reader->GetSchema(),
-                                             &bind_data,
-                                             "");
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
+                                      exchange_result.reader->GetSchema(),
+                                      &bind_data,
+                                      "");
 
     auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
         (stream_factory_produce_t)&AirportCreateStream,
@@ -1332,7 +1332,7 @@ namespace duckdb
     appender->Append(input, 0, input.size(), input.size());
     ArrowArray arr = appender->Finalize();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, global_state.send_schema),
         global_state.scan_bind_data,

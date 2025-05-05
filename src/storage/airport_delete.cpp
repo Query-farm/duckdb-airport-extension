@@ -163,7 +163,7 @@ namespace duckdb
     appender->Append(small_chunk, 0, small_chunk.size(), small_chunk.size());
     ArrowArray arr = appender->Finalize();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, gstate.send_schema),
         gstate.table.table_data,

@@ -57,7 +57,7 @@ namespace duckdb
 
     auto buffer_reader = std::make_shared<arrow::io::BufferReader>(function_call_data.data);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto arg_reader,
         arrow::ipc::RecordBatchStreamReader::Open(buffer_reader),
         (&bind_data),
@@ -138,7 +138,7 @@ namespace duckdb
       named_parameter_indexes.push_back(col_index);
     }
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         std::shared_ptr<arrow::RecordBatch> batch,
         arg_reader->Next(),
         (&bind_data),
@@ -364,10 +364,10 @@ namespace duckdb
         if (using_ipc_stream)
         {
           auto stream_reader = std::get<std::shared_ptr<arrow::ipc::RecordBatchStreamReader>>(delegate_);
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto batch_result, stream_reader->Next(), this, "ReadNext");
+          AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto batch_result, stream_reader->Next(), this, "ReadNext");
           if (batch_result)
           {
-            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+            AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
                 auto aligned_chunk,
                 arrow::util::EnsureAlignment(batch_result, 8, arrow::default_memory_pool()),
                 this,
@@ -387,10 +387,10 @@ namespace duckdb
         else if (using_ipc_file)
         {
           auto stream_reader = std::get<std::shared_ptr<arrow::ipc::RecordBatchFileReader>>(delegate_);
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto batch_result, stream_reader->ReadRecordBatch(batch_index_++), this, "ReadNext");
+          AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto batch_result, stream_reader->ReadRecordBatch(batch_index_++), this, "ReadNext");
           if (batch_result)
           {
-            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+            AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
                 auto aligned_chunk,
                 arrow::util::EnsureAlignment(batch_result, 8, arrow::default_memory_pool()),
                 this,
@@ -410,10 +410,10 @@ namespace duckdb
         else if (using_flight)
         {
           auto flight_delegate = std::get<std::shared_ptr<arrow::flight::FlightStreamReader>>(delegate_);
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk chunk,
-                                                   flight_delegate->Next(),
-                                                   this,
-                                                   "");
+          AIRPORT_ASSIGN_OR_RAISE_CONTAINER(flight::FlightStreamChunk chunk,
+                                            flight_delegate->Next(),
+                                            this,
+                                            "");
           if (chunk.app_metadata)
           {
             // Handle app metadata if needed
@@ -439,7 +439,7 @@ namespace duckdb
           }
           else if (chunk.data)
           {
-            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+            AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
                 auto aligned_chunk,
                 arrow::util::EnsureAlignment(chunk.data, 8, arrow::default_memory_pool()),
                 this,

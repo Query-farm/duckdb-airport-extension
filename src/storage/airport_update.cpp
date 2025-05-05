@@ -233,7 +233,7 @@ namespace duckdb
     // Import the record batch into the the C++ side of Arrow and write it
     // to the stream.
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, gstate.send_schema),
         gstate.table.table_data, "");

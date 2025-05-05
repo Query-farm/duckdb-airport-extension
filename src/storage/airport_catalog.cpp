@@ -49,16 +49,16 @@ namespace duckdb
 
     auto &server_location = attach_parameters_->location();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client_->DoAction(call_options, action),
-                                            server_location,
-                                            "calling catalog_version action");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
+                                     flight_client_->DoAction(call_options, action),
+                                     server_location,
+                                     "calling catalog_version action");
 
     // The only item returned is a serialized flight info.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_catalog_version_buffer,
-                                            action_results->Next(),
-                                            server_location,
-                                            "reading catalog_version action result");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto serialized_catalog_version_buffer,
+                                     action_results->Next(),
+                                     server_location,
+                                     "reading catalog_version action result");
 
     AIRPORT_MSGPACK_UNPACK(AirportGetCatalogVersionResult, result,
                            (*serialized_catalog_version_buffer->body),

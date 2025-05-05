@@ -167,10 +167,10 @@ namespace duckdb
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "create_schema", params);
 
     std::unique_ptr<arrow::flight::ResultStream> action_results;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "airport_create_schema");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results,
+                                     flight_client->DoAction(call_options, action),
+                                     server_location,
+                                     "airport_create_schema");
 
     // We aren't interested in anything from this call.
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");

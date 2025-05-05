@@ -126,25 +126,25 @@ namespace duckdb
 
         AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "table_function_flight_info", table_function_parameters);
 
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_table_function_flight_info");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto action_results, flight_client->DoAction(call_options, action), server_location, "airport_table_function_flight_info");
 
         // The only item returned is a serialized flight info.
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_flight_info_buffer, action_results->Next(), server_location, "reading get_flight_info for table function");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto serialized_flight_info_buffer, action_results->Next(), server_location, "reading get_flight_info for table function");
 
         std::string_view serialized_flight_info(reinterpret_cast<const char *>(serialized_flight_info_buffer->body->data()), serialized_flight_info_buffer->body->size());
 
         // Now deserialize that flight info so we can use it.
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(retrieved_flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "deserialize flight info");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION(retrieved_flight_info, arrow::flight::FlightInfo::Deserialize(serialized_flight_info), server_location, "deserialize flight info");
 
         AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
       }
       else
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(retrieved_flight_info,
-                                                           flight_client->GetFlightInfo(call_options, descriptor),
-                                                           server_location,
-                                                           descriptor,
-                                                           "");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(retrieved_flight_info,
+                                                    flight_client->GetFlightInfo(call_options, descriptor),
+                                                    server_location,
+                                                    descriptor,
+                                                    "");
       }
 
       // Assert that the descriptor is the same as the one that was passed in.
@@ -156,11 +156,11 @@ namespace duckdb
       estimated_records = retrieved_flight_info->total_records();
 
       arrow::ipc::DictionaryMemo dictionary_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(schema,
-                                                         retrieved_flight_info->GetSchema(&dictionary_memo),
-                                                         server_location,
-                                                         descriptor,
-                                                         "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(schema,
+                                                  retrieved_flight_info->GetSchema(&dictionary_memo),
+                                                  server_location,
+                                                  descriptor,
+                                                  "");
     }
 
     auto ret = make_uniq<AirportTakeFlightBindData>(
@@ -518,10 +518,10 @@ namespace duckdb
 
   //   // Allocate a buffer to hold the compressed data
 
-  //   AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto compressed_buffer, arrow::AllocateBuffer(max_compressed_len), location, descriptor, "");
+  //   AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto compressed_buffer, arrow::AllocateBuffer(max_compressed_len), location, descriptor, "");
 
   //   // Perform the compression
-  //   AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto compressed_size,
+  //   AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto compressed_size,
   //                                                      codec->Compress(
   //                                                          input.size(),
   //                                                          reinterpret_cast<const uint8_t *>(input.data()),
@@ -583,7 +583,7 @@ namespace duckdb
 
     AirportGetFlightEndpointsRequest endpoints_request;
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(
         endpoints_request.descriptor,
         descriptor.SerializeToString(),
         server_location,
@@ -594,16 +594,16 @@ namespace duckdb
 
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "endpoints", endpoints_request);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "airport endpoints action");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
+                                     flight_client->DoAction(call_options, action),
+                                     server_location,
+                                     "airport endpoints action");
 
     // The only item returned is a serialized flight info.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto serialized_endpoint_info_buffer,
-                                            action_results->Next(),
-                                            server_location,
-                                            "reading endpoints");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto serialized_endpoint_info_buffer,
+                                     action_results->Next(),
+                                     server_location,
+                                     "reading endpoints");
 
     std::string_view serialized_endpoint_info(reinterpret_cast<const char *>(serialized_endpoint_info_buffer->body->data()), serialized_endpoint_info_buffer->body->size());
 
@@ -619,10 +619,10 @@ namespace duckdb
 
     for (const auto &endpoint : serialized_endpoints)
     {
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto deserialized_endpoint,
-                                              arrow::flight::FlightEndpoint::Deserialize(endpoint),
-                                              server_location,
-                                              "deserialize flight endpoint");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto deserialized_endpoint,
+                                       arrow::flight::FlightEndpoint::Deserialize(endpoint),
+                                       server_location,
+                                       "deserialize flight endpoint");
       endpoints.push_back(std::move(deserialized_endpoint));
     }
     return endpoints;
@@ -837,18 +837,18 @@ namespace duckdb
         else if (location_data.format == "ipc-stream" || location_data.format == "ipc-file")
         {
           std::string actual_path;
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto fs,
-                                                  arrow::fs::FileSystemFromUriOrPath(location_data.uri, &actual_path),
-                                                  server_location,
-                                                  "airport_take_flight: parsing data URI");
+          AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto fs,
+                                           arrow::fs::FileSystemFromUriOrPath(location_data.uri, &actual_path),
+                                           server_location,
+                                           "airport_take_flight: parsing data URI");
 
-          AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto input_file, fs->OpenInputFile(actual_path),
-                                                  server_location,
-                                                  "airport_take_flight: opening data URI");
+          AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto input_file, fs->OpenInputFile(actual_path),
+                                           server_location,
+                                           "airport_take_flight: opening data URI");
 
           if (location_data.format == "ipc-stream")
           {
-            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+            AIRPORT_ASSIGN_OR_RAISE_LOCATION(
                 auto reader,
                 arrow::ipc::RecordBatchStreamReader::Open(input_file),
                 server_location,
@@ -863,7 +863,7 @@ namespace duckdb
           }
           else if (location_data.format == "ipc-file")
           {
-            AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+            AIRPORT_ASSIGN_OR_RAISE_LOCATION(
                 auto reader,
                 arrow::ipc::RecordBatchFileReader::Open(input_file),
                 server_location,
@@ -884,10 +884,10 @@ namespace duckdb
     {
       if (location != flight::Location::ReuseConnection())
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_client,
-                                                flight::FlightClient::Connect(location),
-                                                location.ToString(),
-                                                "");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION(flight_client,
+                                         flight::FlightClient::Connect(location),
+                                         location.ToString(),
+                                         "");
         server_location = bind_data.server_location();
       }
 
@@ -907,7 +907,7 @@ namespace duckdb
         call_options.headers.emplace_back("airport-skip-producing-results", "1");
       }
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
           auto stream,
           flight_client->DoGet(
               call_options,

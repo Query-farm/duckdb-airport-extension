@@ -89,10 +89,10 @@ namespace duckdb
 
     auto &server_location = airport_catalog.attach_parameters()->location();
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "airport_create_schema");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
+                                     flight_client->DoAction(call_options, action),
+                                     server_location,
+                                     "airport_create_schema");
 
     AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
 

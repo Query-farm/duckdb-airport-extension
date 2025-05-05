@@ -192,7 +192,7 @@ namespace duckdb
     auto &server_location = data.take_flight_params().server_location();
 
     AirportGetFlightColumnStatistics params;
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(
         params.flight_descriptor,
         data.descriptor().SerializeToString(),
         server_location,
@@ -204,16 +204,16 @@ namespace duckdb
     call_options.headers.emplace_back("airport-action-name", "column_statistics");
     AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "column_statistics", params);
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "take_flight_statitics");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto action_results,
+                                     flight_client->DoAction(call_options, action),
+                                     server_location,
+                                     "take_flight_statitics");
 
     // The only item returned is a serialized flight info.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto stats_buffer,
-                                            action_results->Next(),
-                                            server_location,
-                                            "reading take_flight_statistics for a column");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto stats_buffer,
+                                     action_results->Next(),
+                                     server_location,
+                                     "reading take_flight_statistics for a column");
 
     std::string_view serialized_column_statistics(reinterpret_cast<const char *>(stats_buffer->body->data()), stats_buffer->body->size());
 

@@ -76,14 +76,14 @@ namespace duckdb
       std::shared_ptr<arrow::Schema> cpp_schema;
 
       // Export the C based schema to the C++ one.
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           cpp_schema,
           arrow::ImportSchema(&send_schema),
           server_location,
           "ExportSchema");
 
       // Now serialize the schema
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           auto serialized_schema,
           arrow::ipc::SerializeSchema(*cpp_schema, arrow::default_memory_pool()),
           server_location,
@@ -118,14 +118,14 @@ namespace duckdb
       std::shared_ptr<arrow::Schema> cpp_schema;
 
       // Export the C based schema to the C++ one.
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           cpp_schema,
           arrow::ImportSchema(&send_schema),
           server_location,
           "ExportSchema");
 
       // Now serialize the schema
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           auto serialized_schema,
           arrow::ipc::SerializeSchema(*cpp_schema, arrow::default_memory_pool()),
           server_location,
@@ -233,14 +233,14 @@ namespace duckdb
       std::shared_ptr<arrow::Schema> cpp_schema;
 
       // Export the C based schema to the C++ one.
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           cpp_schema,
           arrow::ImportSchema(&send_schema),
           server_location,
           "ExportSchema");
 
       // Now serialize the schema
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(
           auto serialized_schema,
           arrow::ipc::SerializeSchema(*cpp_schema, arrow::default_memory_pool()),
           server_location,

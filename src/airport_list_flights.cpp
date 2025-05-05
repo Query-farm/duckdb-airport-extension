@@ -150,13 +150,13 @@ namespace duckdb
       airport_add_authorization_header(call_options, bind_data.auth_token);
       // printf("Calling with filters: %s\n", bind_data.json_filters.c_str());
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(global_state.listing, global_state.flight_client_->ListFlights(call_options, {bind_data.criteria}), bind_data.server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(global_state.listing, global_state.flight_client_->ListFlights(call_options, {bind_data.criteria}), bind_data.server_location, "");
     }
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info,
-                                            global_state.listing->Next(),
-                                            bind_data.server_location,
-                                            "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info,
+                                     global_state.listing->Next(),
+                                     bind_data.server_location,
+                                     "");
 
     if (flight_info == nullptr)
     {
@@ -286,10 +286,10 @@ namespace duckdb
       FlatVector::GetData<string_t>(output.data[5])[output_row_index] = StringVector::AddStringOrBlob(output.data[5], flight_info->app_metadata());
 
       arrow::ipc::DictionaryMemo dictionary_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto info_schema, flight_info->GetSchema(&dictionary_memo), bind_data.server_location, descriptor, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(auto info_schema, flight_info->GetSchema(&dictionary_memo), bind_data.server_location, descriptor, "");
       FlatVector::GetData<string_t>(output.data[6])[output_row_index] = StringVector::AddStringOrBlob(output.data[6], info_schema->ToString());
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, global_state.listing->Next(), bind_data.server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(flight_info, global_state.listing->Next(), bind_data.server_location, "");
       output_row_index++;
     }
 

@@ -144,7 +144,7 @@ namespace duckdb
             std::make_shared<arrow::Buffer>(serialized_schema));
 
         arrow::ipc::DictionaryMemo in_memo;
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+        AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
             auto parameter_schema,
             arrow::ipc::ReadSchema(&parameter_schema_reader, &in_memo),
             this,
@@ -209,7 +209,7 @@ namespace duckdb
         const arrow::flight::FlightInfo &flight_info)
     {
       arrow::ipc::DictionaryMemo dictionary_memo;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION_DESCRIPTOR(
           auto extracted_schema,
           flight_info.GetSchema(&dictionary_memo),
           server_location,

@@ -49,15 +49,15 @@ namespace duckdb
 
   static string decompressZStandard(const string &source, const int decompressed_size, const string &location)
   {
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(
         auto codec,
         arrow::util::Codec::Create(arrow::Compression::ZSTD),
         location, "");
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto decompressed_data,
-                                            ::arrow::AllocateBuffer(decompressed_size),
-                                            location,
-                                            "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto decompressed_data,
+                                     ::arrow::AllocateBuffer(decompressed_size),
+                                     location,
+                                     "");
 
     auto decompress_result = codec->Decompress(
         source.size(),
@@ -115,11 +115,11 @@ namespace duckdb
       return it->second;
     }
 
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto parsed_location,
-                                            flight::Location::Parse(location), location, "");
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(airport_flight_clients_by_location[location],
-                                            flight::FlightClient::Connect(parsed_location),
-                                            location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto parsed_location,
+                                     flight::Location::Parse(location), location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(airport_flight_clients_by_location[location],
+                                     flight::FlightClient::Connect(parsed_location),
+                                     location, "");
 
     return airport_flight_clients_by_location[location];
   }
@@ -538,7 +538,7 @@ namespace duckdb
 
       for (auto item : unpacked_data)
       {
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(item), server_location, "");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto flight_info, arrow::flight::FlightInfo::Deserialize(item), server_location, "");
 
         // Look in api_metadata for each flight and determine if it should be handled
         // if there is no metadata specified on a flight it is ignored.
@@ -567,10 +567,10 @@ namespace duckdb
 
       auto flight_client = FlightClientForLocation(credentials->location());
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto listing, flight_client->ListFlights(call_options, {credentials->criteria()}), server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto listing, flight_client->ListFlights(call_options, {credentials->criteria()}), server_location, "");
 
       std::shared_ptr<flight::FlightInfo> flight_info;
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), server_location, "");
+      AIRPORT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), server_location, "");
 
       while (flight_info != nullptr)
       {
@@ -581,7 +581,7 @@ namespace duckdb
           auto output_schema = AirportAPIObjectBase::GetSchema(server_location, *flight_info);
           handle_flight_app_metadata(app_metadata, catalog, schema, server_location, flight_info->descriptor(), output_schema, contents);
         }
-        AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), server_location, "");
+        AIRPORT_ASSIGN_OR_RAISE_LOCATION(flight_info, listing->Next(), server_location, "");
       }
 
       return contents;
@@ -645,13 +645,13 @@ namespace duckdb
     std::unique_ptr<arrow::flight::ResultStream> action_results;
 
     auto &server_location = credentials->location();
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(action_results,
-                                            flight_client->DoAction(call_options, action),
-                                            server_location,
-                                            "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results,
+                                     flight_client->DoAction(call_options, action),
+                                     server_location,
+                                     "");
 
     // There is a single item returned which is the compressed schema data.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_LOCATION(auto msgpack_serialized_response, action_results->Next(), server_location, "");
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto msgpack_serialized_response, action_results->Next(), server_location, "");
 
     if (msgpack_serialized_response == nullptr)
     {

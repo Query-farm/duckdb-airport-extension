@@ -65,7 +65,7 @@ namespace duckdb
 
       airport_add_flight_path_header(call_options, this->descriptor());
 
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+      AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
           auto exchange_result,
           flight_client->DoExchange(call_options, this->descriptor()),
           this, "");
@@ -86,10 +86,10 @@ namespace duckdb
           this->descriptor());
 
       // Read the schema for the results being returned.
-      AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                               exchange_result.reader->GetSchema(),
-                                               this,
-                                               "");
+      AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
+                                        exchange_result.reader->GetSchema(),
+                                        this,
+                                        "");
 
       // Ensure that the schema of the response matches the one that was
       // returned on the flight info object.
@@ -265,7 +265,7 @@ namespace duckdb
     std::shared_ptr<arrow::Schema> cpp_schema;
 
     // Export the C based schema to the C++ one.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         cpp_schema,
         arrow::ImportSchema(&send_schema),
         (&info),
@@ -297,7 +297,7 @@ namespace duckdb
     ArrowArray arr = appender->Finalize();
 
     // Copy from the Appender into the RecordBatch.
-    AIRPORT_FLIGHT_ASSIGN_OR_RAISE_CONTAINER(
+    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, function_input_schema_),
         this, "");
