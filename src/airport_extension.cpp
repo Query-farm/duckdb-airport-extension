@@ -168,15 +168,16 @@ namespace duckdb
     static void AirportAddListDatabasesMacro(DatabaseInstance &instance)
     {
         child_list_t<Value> named_params = {
-            {"auth_token", Value()},
-            {"secret", Value()},
-            {"headers", Value()},
+            //            {"auth_token", Value()},
+            //            {"secret", Value()},
+            // {"headers", Value()},
         };
 
         RegisterTableMacro(
             instance,
             "airport_databases",
-            "select * from airport_take_flight(server_location, ['__databases'], auth_token=auth_token, secret=secret, headers=headers)",
+            "select * from airport_take_flight(server_location, ['__databases'])",
+            //            "select * from airport_take_flight(server_location, ['__databases'], auth_token=auth_token, secret=secret, headers=headers)",
             {"server_location"},
             named_params);
     }
@@ -185,11 +186,10 @@ namespace duckdb
     {
         curl_global_init(CURL_GLOBAL_DEFAULT);
 
-        // We could add some parameter here for authentication
-        // and extra headers.
-        AddListFlightsFunction(instance);
-
-        AddTakeFlightFunction(instance);
+        AirportAddListFlightsFunction(instance);
+        AirportAddTakeFlightFunction(instance);
+        AirportAddUserAgentFunction(instance);
+        AirportAddActionFlightFunction(instance);
 
         // So to create a new macro for airport_list_databases
         // that calls airport_take_flight with a fixed flight descriptor

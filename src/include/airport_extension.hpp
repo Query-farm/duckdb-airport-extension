@@ -67,5 +67,6 @@ namespace duckdb
 
 	void AirportAddListFlightsFunction(DatabaseInstance &instance);
 	void AirportAddTakeFlightFunction(DatabaseInstance &instance);
+	void AirportAddActionFlightFunction(DatabaseInstance &instance);
 
 } // namespace duckdb
