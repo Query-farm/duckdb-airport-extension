@@ -40,6 +40,13 @@ The main binaries that will be built are:
 - `unittest` is the test runner of duckdb. Again, the extension is already linked into the binary.
 - `airport.duckdb_extension` is the loadable binary as it would be distributed.
 
+## Building on MacOS
+If you have difficulties building with the clang provided by the Xcode Command Line Tools, you may want to try installing llvm and using the included clang. Also, some of the dependencies built by `vcpkg` require GNU bison to be installed:
+```sh
+brew install bison cmake llvm
+export CXX=/opt/homebrew/opt/llvm/bin/clang++
+```
+
 ## Running the extension
 
 To run the extension code, simply start the shell with `./build/release/duckdb`. This duckdb shell will have the extension pre-loaded.
