@@ -74,10 +74,20 @@ namespace duckdb
     throw NotImplementedException("CreateIndex");
   }
 
-  string GetAirportCreateView(const CreateViewInfo &info)
+  struct AirportCreateViewParameters
   {
-    throw NotImplementedException("GetCreateView");
-  }
+    std::string catalog_name;
+    std::string schema_name;
+    std::string view_name;
+    
+    // The SQL query for the materialized view
+    std::string sql_query;
+    
+    // This will be "error", "ignore", or "replace"
+    std::string on_conflict;
+
+    MSGPACK_DEFINE_MAP(catalog_name, schema_name, view_name, sql_query, on_conflict)
+  };
 
   optional_ptr<CatalogEntry> AirportSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info)
   {
@@ -99,9 +109,71 @@ namespace duckdb
         throw NotImplementedException("REPLACE ON CONFLICT in CreateView");
       }
     }
-    // auto &airport_transaction = GetAirportTransaction(transaction);
-    //	uc_transaction.Query(GetAirportCreateView(info));
-    return tables.RefreshTable(transaction.GetContext(), info.view_name);
+
+    auto &airport_catalog = catalog.Cast<AirportCatalog>();
+    auto &server_location = airport_catalog.attach_parameters()->location();
+
+    // Prepare parameters for create_view action
+    AirportCreateViewParameters params;
+    params.catalog_name = airport_catalog.internal_name();
+    params.schema_name = info.schema;
+    params.view_name = info.view_name;
+    params.sql_query = info.sql;
+    
+    switch (info.on_conflict)
+    {
+    case OnCreateConflict::ERROR_ON_CONFLICT:
+      params.on_conflict = "error";
+      break;
+    case OnCreateConflict::IGNORE_ON_CONFLICT:
+      params.on_conflict = "ignore";
+      break;
+    case OnCreateConflict::REPLACE_ON_CONFLICT:
+      params.on_conflict = "replace";
+      break;
+    default:
+      throw NotImplementedException("Unimplemented conflict type");
+    }
+
+    arrow::flight::FlightCallOptions call_options;
+
+    airport_add_standard_headers(call_options, airport_catalog.attach_parameters()->location());
+    airport_add_authorization_header(call_options, airport_catalog.attach_parameters()->auth_token());
+
+    call_options.headers.emplace_back("airport-action-name", "create_view");
+
+    auto flight_client = AirportAPI::FlightClientForLocation(airport_catalog.attach_parameters()->location());
+
+    AIRPORT_MSGPACK_ACTION_SINGLE_PARAMETER(action, "create_view", params);
+
+    std::unique_ptr<arrow::flight::ResultStream> action_results;
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(action_results, flight_client->DoAction(call_options, action), server_location, "airport_create_view");
+
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(auto result_buffer, action_results->Next(), server_location, "");
+    AIRPORT_ARROW_ASSERT_OK_LOCATION(action_results->Drain(), server_location, "");
+
+    if (result_buffer == nullptr)
+    {
+      throw AirportFlightException(server_location, "No flight info returned from create_view action");
+    }
+
+    std::string_view serialized_flight_info(reinterpret_cast<const char *>(result_buffer->body->data()), result_buffer->body->size());
+
+    // Deserialize the flight info from create_view RPC
+    AIRPORT_ASSIGN_OR_RAISE_LOCATION(
+        auto flight_info,
+        arrow::flight::FlightInfo::Deserialize(serialized_flight_info),
+        server_location,
+        "Error deserializing flight info from create_view RPC");
+
+    auto table_entry = AirportCatalogEntryFromFlightInfo(
+        std::move(flight_info),
+        server_location,
+        *this,
+        catalog,
+        transaction.GetContext());
+
+    return tables.CreateEntry(std::move(table_entry));
   }
 
   optional_ptr<CatalogEntry> AirportSchemaEntry::CreateType(CatalogTransaction transaction, CreateTypeInfo &info)
