@@ -392,7 +392,17 @@ namespace duckdb
     return result;
   }
 
-  struct AirportDynamicTableInOutGlobalState : public GlobalTableFunctionState, public AirportExchangeGlobalState
+  struct AirportDynamicTableInOutGlobalState : public GlobalTableFunctionState
+  {
+      std::string trace_uuid;
+      arrow::flight::FlightCallOptions call_options;
+      std::shared_ptr<arrow::flight::FlightClient> flight_client;
+      std::shared_ptr<arrow::Buffer> parameters_buffer;
+      std::shared_ptr<arrow::Schema> send_schema;
+      std::unique_ptr<AirportArrowScanGlobalState> scan_global_state;
+  };
+
+  struct AirportDynamicTableInOutLocalState : public LocalTableFunctionState, public AirportExchangeGlobalState
   {
   };
 
@@ -437,11 +447,6 @@ namespace duckdb
 
     auto flight_client = AirportAPI::FlightClientForLocation(bind_data.server_location());
 
-    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
-        auto exchange_result,
-        flight_client->DoExchange(call_options, bind_data.descriptor()),
-        &bind_data, "AirportDynamicTableInOutGlobalInit DoExchange");
-
     AirportTableFunctionInOutParameters parameters;
     parameters.json_filters = bind_data.json_filters;
     parameters.column_ids = bind_data.column_ids;
@@ -452,14 +457,9 @@ namespace duckdb
     msgpack::sbuffer parameters_packed_buffer;
     msgpack::pack(parameters_packed_buffer, parameters);
 
-    std::shared_ptr<arrow::Buffer> parameters_buffer = std::make_shared<arrow::Buffer>(
-        reinterpret_cast<const uint8_t *>(parameters_packed_buffer.data()),
-        parameters_packed_buffer.size());
+    auto parameters_buffer = arrow::Buffer::FromString(
+        std::string(parameters_packed_buffer.data(), parameters_packed_buffer.size()));
 
-    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-        exchange_result.writer->WriteMetadata(parameters_buffer),
-        &bind_data,
-        "airport_dynamic_table_function: write metadata with parameters");
 
     // Thsi is correct, since we are writing to the server,
     // so the writer has the schema of the table_input_schema.
@@ -475,38 +475,6 @@ namespace duckdb
         arrow::ipc::ReadSchema(buffer_reader.get(), &in_memo),
         &bind_data, "ReadSchema");
 
-    // Tell the server the schema that we will be using to write data.
-    AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-        exchange_result.writer->Begin(send_schema),
-        &bind_data,
-        "airport_dynamic_table_function: send schema");
-
-    vector<column_t> column_ids;
-
-    // This is the schema from the server, the output.
-    AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
-                                      exchange_result.reader->GetSchema(),
-                                      &bind_data,
-                                      "");
-
-    auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
-        (stream_factory_produce_t)&AirportCreateStream,
-        trace_uuid,
-        -1,
-        bind_data.take_flight_params(),
-        std::nullopt,
-        read_schema,
-        bind_data.descriptor(),
-        nullptr);
-
-    // printf("Arrow schema column names are: %s\n", join_vector_of_strings(reading_arrow_column_names, ',').c_str());
-    // printf("Expected order of columns to be: %s\n", join_vector_of_strings(destination_chunk_column_names, ',').c_str());
-
-    scan_bind_data->examine_schema(context, true);
-
-    // There shouldn't be any projection ids.
-    vector<idx_t> projection_ids;
-
     auto scan_global_state = make_uniq<AirportArrowScanGlobalState>();
 
     // Retain the global state.
@@ -514,55 +482,118 @@ namespace duckdb
 
     global_state->scan_global_state = std::move(scan_global_state);
     global_state->send_schema = send_schema;
-
-    // Now simulate the init input.
-    auto fake_init_input = TableFunctionInitInput(
-        &scan_bind_data->Cast<FunctionData>(),
-        column_ids,
-        projection_ids,
-        nullptr);
-
-    // Local init.
-
-    auto current_chunk = make_uniq<ArrowArrayWrapper>();
-    auto scan_local_state = make_uniq<AirportArrowScanLocalState>(
-        std::move(current_chunk),
-        context,
-        std::move(exchange_result.reader),
-        fake_init_input);
-    scan_local_state->set_stream(
-        AirportProduceArrowScan(
-            scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
-            column_ids,
-            nullptr,
-            // Can't use progress reporting here.
-            nullptr,
-            &scan_bind_data->last_app_metadata,
-            scan_bind_data->schema(),
-            *scan_bind_data,
-            *scan_local_state));
-
-    scan_local_state->column_ids = fake_init_input.column_ids;
-    scan_local_state->filters = fake_init_input.filters.get();
-
-    global_state->scan_local_state = std::move(scan_local_state);
-
-    // Create a parameter is the commonly passed to the other functions.
-    global_state->scan_bind_data = std::move(scan_bind_data);
-    global_state->writer = std::move(exchange_result.writer);
-
-    global_state->scan_table_function_input = make_uniq<TableFunctionInput>(
-        global_state->scan_bind_data.get(),
-        global_state->scan_local_state.get(),
-        global_state->scan_global_state.get());
+    global_state->call_options = call_options;
+    global_state->flight_client = flight_client;
+    global_state->parameters_buffer = parameters_buffer;
+    global_state->trace_uuid = trace_uuid;
 
     return global_state;
+  }
+
+  static unique_ptr<LocalTableFunctionState>
+      AirportDynamicTableInOutLocalInit(ExecutionContext& context,
+          TableFunctionInitInput& input, GlobalTableFunctionState* global_state)
+  {
+      auto& gstate = global_state->Cast<AirportDynamicTableInOutGlobalState>();
+
+      auto& bind_data = input.bind_data->Cast<AirportTakeFlightBindData>();
+
+      AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
+          auto exchange_result,
+          gstate.flight_client->DoExchange(gstate.call_options, bind_data.descriptor()),
+          &bind_data, "AirportDynamicTableInOutGlobalInit DoExchange");
+
+      AIRPORT_ARROW_ASSERT_OK_CONTAINER(
+          exchange_result.writer->WriteMetadata(gstate.parameters_buffer),
+          &bind_data,
+          "airport_dynamic_table_function: write metadata with parameters");
+
+      // Tell the server the schema that we will be using to write data.
+      AIRPORT_ARROW_ASSERT_OK_CONTAINER(
+          exchange_result.writer->Begin(gstate.send_schema),
+          &bind_data,
+          "airport_dynamic_table_function: send schema");
+
+      vector<column_t> column_ids;
+
+      // This is the schema from the server, the output.
+      AIRPORT_ASSIGN_OR_RAISE_CONTAINER(auto read_schema,
+          exchange_result.reader->GetSchema(),
+          &bind_data,
+          "");
+
+      auto scan_bind_data = make_uniq<AirportExchangeTakeFlightBindData>(
+          (stream_factory_produce_t)&AirportCreateStream,
+          gstate.trace_uuid,
+          -1,
+          bind_data.take_flight_params(),
+          std::nullopt,
+          read_schema,
+          bind_data.descriptor(),
+          nullptr);
+
+      // printf("Arrow schema column names are: %s\n", join_vector_of_strings(reading_arrow_column_names, ',').c_str());
+      // printf("Expected order of columns to be: %s\n", join_vector_of_strings(destination_chunk_column_names, ',').c_str());
+
+      scan_bind_data->examine_schema(context.client, true);
+
+      // There shouldn't be any projection ids.
+      vector<idx_t> projection_ids;
+
+      // Retain the local state.
+      unique_ptr<AirportDynamicTableInOutLocalState> local_state = make_uniq<AirportDynamicTableInOutLocalState>();
+
+      // Now simulate the init input.
+      auto fake_init_input = TableFunctionInitInput(
+          &scan_bind_data->Cast<FunctionData>(),
+          column_ids,
+          projection_ids,
+          nullptr);
+
+      // Local init.
+
+      auto current_chunk = make_uniq<ArrowArrayWrapper>();
+      
+      auto scan_local_state = make_uniq<AirportArrowScanLocalState>(
+          std::move(current_chunk),
+          context.client,
+          std::move(exchange_result.reader),
+          fake_init_input);
+
+      scan_local_state->set_stream(
+          AirportProduceArrowScan(
+              scan_bind_data->CastNoConst<AirportTakeFlightBindData>(),
+              column_ids,
+              nullptr,
+              // Can't use progress reporting here.
+              nullptr,
+              &scan_bind_data->last_app_metadata,
+              scan_bind_data->schema(),
+              *scan_bind_data,
+              *scan_local_state));
+
+      scan_local_state->column_ids = fake_init_input.column_ids;
+      scan_local_state->filters = fake_init_input.filters.get();
+
+      local_state->scan_local_state = std::move(scan_local_state);
+
+      // Create a parameter is the commonly passed to the other functions.
+      local_state->scan_bind_data = std::move(scan_bind_data);
+      local_state->writer = std::move(exchange_result.writer);
+
+      local_state->scan_table_function_input = make_uniq<TableFunctionInput>(
+          local_state->scan_bind_data.get(),
+          local_state->scan_local_state.get(),
+          gstate.scan_global_state.get());
+
+      return local_state;
   }
 
   static OperatorResultType AirportTakeFlightInOut(ExecutionContext &context, TableFunctionInput &data_p, DataChunk &input,
                                                    DataChunk &output)
   {
     auto &global_state = data_p.global_state->Cast<AirportDynamicTableInOutGlobalState>();
+    auto &local_state = data_p.local_state->Cast<AirportDynamicTableInOutLocalState>();
 
     // We need to send data to the server.
 
@@ -579,13 +610,13 @@ namespace duckdb
     AIRPORT_ASSIGN_OR_RAISE_CONTAINER(
         auto record_batch,
         arrow::ImportRecordBatch(&arr, global_state.send_schema),
-        global_state.scan_bind_data,
+        local_state.scan_bind_data,
         "airport_dynamic_table_function: import record batch");
 
     // Now send it
     AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-        global_state.writer->WriteRecordBatch(*record_batch),
-        global_state.scan_bind_data,
+        local_state.writer->WriteRecordBatch(*record_batch),
+        local_state.scan_bind_data,
         "airport_dynamic_table_function: write record batch");
 
     // The server could produce results, so we should read them.
@@ -597,8 +628,8 @@ namespace duckdb
     // Rusty: for now just produce a chunk for every chunk read.
     output.Reset();
     {
-      auto &data = global_state.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>();
-      auto &state = global_state.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
+      auto &data = local_state.scan_table_function_input->bind_data->CastNoConst<AirportTakeFlightBindData>();
+      auto &state = local_state.scan_table_function_input->local_state->Cast<AirportArrowScanLocalState>();
       //      auto &global_state2 = global_state.scan_table_function_input->global_state->Cast<AirportArrowScanGlobalState>();
 
       state.chunk = state.stream()->GetNextChunk();
@@ -624,17 +655,19 @@ namespace duckdb
                                                                    DataChunk &output)
   {
     auto &global_state = data_p.global_state->Cast<AirportDynamicTableInOutGlobalState>();
+    auto &local_state = data_p.local_state->Cast<AirportDynamicTableInOutLocalState>();
+
     const arrow::Buffer finished_buffer("finished");
 
     // So we need to send data to the server.
     AIRPORT_ARROW_ASSERT_OK_CONTAINER(
-        global_state.writer->DoneWriting(),
-        global_state.scan_bind_data,
+        local_state.writer->DoneWriting(),
+        local_state.scan_bind_data,
         "airport_dynamic_table_function: finalize done writing");
 
     bool is_finished = false;
     {
-      auto &scan_data = global_state.scan_table_function_input;
+      auto &scan_data = local_state.scan_table_function_input;
       auto &data = scan_data->bind_data->CastNoConst<AirportTakeFlightBindData>();
       auto &state = scan_data->local_state->Cast<AirportArrowScanLocalState>();
       //      auto &global_state2 = scan_data->global_state->Cast<AirportArrowScanGlobalState>();
@@ -748,7 +781,7 @@ namespace duckdb
               // The bind function knows how to handle the in and out.
               AirportDynamicTableBind,
               AirportDynamicTableInOutGlobalInit,
-              nullptr);
+              AirportDynamicTableInOutLocalInit);
 
           table_func.in_out_function = AirportTakeFlightInOut;
           table_func.in_out_function_final = AirportTakeFlightInOutFinalize;
